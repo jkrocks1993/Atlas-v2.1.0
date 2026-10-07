@@ -137,8 +137,8 @@ struct ContentView: View {
 }
 
 enum ReleaseNotes {
-    static let currentVersion = "2.1.3"
-    static let currentBuild = "17"
+    static let currentVersion = "2.1.4"
+    static let currentBuild = "18"
 
     struct Entry: Identifiable {
         let id: String
@@ -148,6 +148,10 @@ enum ReleaseNotes {
     }
 
     static let history: [Entry] = [
+        Entry(id: "2.1.4", version: "2.1.4", build: "18", lines: [
+            "Drag selection now starts in the empty space under and beside the tiles, not only on a tile.",
+            "The selection rectangle stays smooth. The list updates only when the set of selected files changes."
+        ]),
         Entry(id: "2.1.3", version: "2.1.3", build: "17", lines: [
             "Drag across files with the trackpad or mouse to select them.",
             "The blue rectangle selects every file it touches, in the list and in tiles.",
