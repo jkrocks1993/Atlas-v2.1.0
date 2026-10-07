@@ -66,6 +66,8 @@ final class AppState: ObservableObject {
     private var pendingRowWork: DispatchWorkItem?
     private var pendingSearchWork: DispatchWorkItem?
     private var searchGeneration: Int = 0
+    @Published var showReleaseNotes: Bool = false
+    private var selectionAnchorID: UUID?
 
     init() {
         if let url = try? ResultStore.persistentURL(), FileManager.default.fileExists(atPath: url.path), let store = try? ResultStore(url: url) {
@@ -475,7 +477,11 @@ final class AppState: ObservableObject {
         if selectedFileID == nil, let first = visibleRows.compactMap(\.fileID).first { selectForPreview(first) }
     }
 
-    func selectAllVisible() { checkedIDs.formUnion(visibleRows.compactMap(\.fileID)) }
+    func selectAllVisible() {
+        let ids = visibleRows.compactMap(\.fileID)
+        checkedIDs.formUnion(ids)
+        if selectionAnchorID == nil { selectionAnchorID = ids.first }
+    }
 
     func selectInferiorDuplicates() {
         if let store = resultStore {
@@ -502,6 +508,42 @@ final class AppState: ObservableObject {
         guard let id else { selectedFileID = nil; return }
         _ = record(for: id)
         selectedFileID = id
+    }
+
+    /// Finder-style pointer selection. A plain click replaces the selection.
+    /// Command-click toggles one file. Shift-click selects the inclusive range
+    /// from the anchor. Trackpad clicks are the same events as a mouse click.
+    func handlePointerSelection(_ id: UUID) {
+        let flags = NSEvent.modifierFlags
+        let command = flags.contains(.command)
+        let shift = flags.contains(.shift)
+        let ids = displayedRows().compactMap(\.fileID)
+        if shift, let anchor = selectionAnchorID ?? selectedFileID, let start = ids.firstIndex(of: anchor), let end = ids.firstIndex(of: id) {
+            let range = Set(ids[min(start, end)...max(start, end)])
+            if command { checkedIDs.formUnion(range) } else { checkedIDs = range }
+            selectForPreview(id)
+            return
+        }
+        if command {
+            toggleChecked(id)
+            selectionAnchorID = id
+            selectForPreview(id)
+            return
+        }
+        checkedIDs = [id]
+        selectionAnchorID = id
+        selectForPreview(id)
+    }
+
+    func noteCurrentReleaseIfNeeded() {
+        if UserDefaults.standard.string(forKey: "atlas.seenRelease") != ReleaseNotes.currentVersion {
+            showReleaseNotes = true
+        }
+    }
+
+    func dismissReleaseNotes() {
+        UserDefaults.standard.set(ReleaseNotes.currentVersion, forKey: "atlas.seenRelease")
+        showReleaseNotes = false
     }
 
     func revealSelectedInFinder() { guard let rec = selectedFile else { return }; NSWorkspace.shared.activateFileViewerSelecting([rec.url]) }
