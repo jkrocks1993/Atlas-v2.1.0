@@ -35,7 +35,7 @@ struct FileListView: View {
                                         }
                                         .background(
                                             RoundedRectangle(cornerRadius: 8)
-                                                .fill(state.selectedFileID == fileID ? Theme.selection : Theme.raised)
+                                                .fill(state.checkedIDs.contains(fileID) || state.selectedFileID == fileID ? Theme.selection : Theme.raised)
                                         )
                                 } else {
                                     rowView(row)
@@ -130,50 +130,51 @@ struct FileRow: View {
             Toggle("", isOn: Binding(
                 get: { state.checkedIDs.contains(display.id) },
                 set: { on in
-                    if on {
-                        state.checkedIDs.insert(display.id)
-                    } else {
-                        state.checkedIDs.remove(display.id)
-                    }
+                    if on { state.checkedIDs.insert(display.id) } else { state.checkedIDs.remove(display.id) }
+                    state.selectForPreview(display.id)
                 }
             ))
             .toggleStyle(.checkbox)
             .labelsHidden()
 
-            Image(systemName: display.isBest ? "star.fill" : "star")
-                .foregroundColor(display.isBest ? Theme.bestGold : .clear)
-                .help(display.isBest ? "BEST / original — not protected from deletion" : "")
+            Button {
+                state.handlePointerSelection(display.id)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: display.isBest ? "star.fill" : "star")
+                        .foregroundColor(display.isBest ? Theme.bestGold : .clear)
+                        .help(display.isBest ? "BEST / original — not protected from deletion" : "")
 
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 6) {
-                    if display.isBest {
-                        Text("BEST")
-                            .font(.system(size: 9, weight: .bold))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(Capsule().fill(Theme.bestGold.opacity(0.2)))
-                            .foregroundColor(Theme.bestGold)
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 6) {
+                            if display.isBest {
+                                Text("BEST")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(Capsule().fill(Theme.bestGold.opacity(0.2)))
+                                    .foregroundColor(Theme.bestGold)
+                            }
+                            Text(display.name)
+                                .font(.system(size: 12.5, weight: display.isBest ? .semibold : .regular))
+                                .foregroundColor(Theme.text)
+                                .lineLimit(1)
+                        }
+                        Text("\(display.path)  ·  \(ByteFormat.string(display.size))  ·  \(DateFormat.string(display.modified))")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                     }
-                    Text(display.name)
-                        .font(.system(size: 12.5, weight: display.isBest ? .semibold : .regular))
-                        .foregroundColor(Theme.text)
-                        .lineLimit(1)
+                    Spacer(minLength: 0)
                 }
-                Text("\(display.path)  ·  \(ByteFormat.string(display.size))  ·  \(DateFormat.string(display.modified))")
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                .contentShape(Rectangle())
             }
-            Spacer()
+            .buttonStyle(.plain)
         }
         .padding(.leading, display.indented ? 22 : 0)
         .padding(.vertical, 2)
         .contentShape(Rectangle())
-        .onTapGesture {
-            state.selectForPreview(display.id)
-            NSApp.keyWindow?.makeFirstResponder(nil)
-        }
     }
 }
 
@@ -242,19 +243,10 @@ struct FileTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ZStack(alignment: .topLeading) {
+            ZStack(alignment: .topTrailing) {
                 TileThumb(path: display.path, side: side - 16)
                     .frame(width: side - 16, height: side - 36)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                Toggle("", isOn: Binding(
-                    get: { state.checkedIDs.contains(display.id) },
-                    set: { on in
-                        if on { state.checkedIDs.insert(display.id) } else { state.checkedIDs.remove(display.id) }
-                    }
-                ))
-                .toggleStyle(.checkbox)
-                .labelsHidden()
-                .padding(6)
                 if isBest {
                     Text("BEST")
                         .font(.system(size: 9, weight: .bold))
@@ -263,7 +255,6 @@ struct FileTile: View {
                         .background(Capsule().fill(Theme.bestGold))
                         .foregroundColor(Theme.ink)
                         .padding(6)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
                 }
             }
             Text(display.name)
@@ -279,16 +270,25 @@ struct FileTile: View {
         .frame(width: side, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(state.selectedFileID == display.id ? Theme.selection : Theme.raised)
+                .fill(state.checkedIDs.contains(display.id) || state.selectedFileID == display.id ? Theme.selection : Theme.raised)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(state.selectedFileID == display.id ? Theme.matteBlue : Color.white.opacity(0.06), lineWidth: state.selectedFileID == display.id ? 2 : 1)
+                .stroke(state.selectedFileID == display.id ? Theme.matteBlue : (state.checkedIDs.contains(display.id) ? Theme.matteBlue.opacity(0.7) : Color.white.opacity(0.06)), lineWidth: state.selectedFileID == display.id || state.checkedIDs.contains(display.id) ? 2 : 1)
         )
         .contentShape(Rectangle())
-        .onTapGesture {
-            state.selectForPreview(display.id)
-            NSApp.keyWindow?.makeFirstResponder(nil)
+        .onTapGesture { state.handlePointerSelection(display.id) }
+        .overlay(alignment: .topLeading) {
+            Toggle("", isOn: Binding(
+                get: { state.checkedIDs.contains(display.id) },
+                set: { on in
+                    if on { state.checkedIDs.insert(display.id) } else { state.checkedIDs.remove(display.id) }
+                    state.selectForPreview(display.id)
+                }
+            ))
+            .toggleStyle(.checkbox)
+            .labelsHidden()
+            .padding(10)
         }
     }
 }
