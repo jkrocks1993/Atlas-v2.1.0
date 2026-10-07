@@ -1,0 +1,16 @@
+ATLAS v2.0.1 Build 13 — verification performed before packaging
+
+Source-level checks:
+- Swift parse: all 31 Swift source files
+- Shell syntax: all installer/build scripts
+- Xcode project Swift file references: 31 referenced / 0 missing
+- Version metadata: 2.0.1
+- Build metadata: 13
+- Product name: Atlas
+- Bundle identifier: com.local.Atlas
+- CFBundleExecutable: Atlas
+- ResultStore.record(UUID): single-row lookup only; no page-local whereParts/sort/direction references
+- Storage_ResultStore + model/feedback code: typechecked with Linux compatibility shims for SQLite3/UniformTypeIdentifiers; no diagnostics
+
+macOS limitation:
+The final native Xcode link step requires macOS/Xcode frameworks and therefore must run on the user's Mac. This environment cannot perform that native link step.

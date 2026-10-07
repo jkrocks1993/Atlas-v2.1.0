@@ -1,0 +1,13 @@
+ATLAS v2.0.1 Build 13 — Intel x86_64
+
+1. Extract this ZIP into Downloads.
+2. Open the folder named ATLAS_v2.0.1_BUILD12_FIXED_x86_64.
+3. Double-click "Install ATLAS.command".
+4. The installer performs a clean Xcode build, prints actual compiler errors if the build fails, and installs only after a verified build to:
+   /Applications/Atlas.app
+
+The build uses a fresh local .xcodeDerivedData directory so stale DerivedData from older ATLAS/MacFileInventory builds cannot be reused.
+
+If a build fails, the installer leaves:
+   Build/atlas-xcodebuild.log
+   Build/atlas-build-errors.txt
