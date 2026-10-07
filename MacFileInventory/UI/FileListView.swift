@@ -8,9 +8,7 @@ import AVFoundation
 struct FileListView: View {
     @EnvironmentObject private var state: AppState
     @State private var itemFrames: [UUID: CGRect] = [:]
-    @State private var dragRect: CGRect?
-    @State private var dragBase: Set<UUID> = []
-    @State private var dragArmed = false
+    @State private var viewport: CGSize = CGSize(width: 640, height: 480)
 
     var body: some View {
         let rows = state.displayedRows()
@@ -22,56 +20,65 @@ struct FileListView: View {
                 )
                 .frame(width: 1, height: 1)
                 ScrollView {
-                    Group {
-                        if state.resultLayout == .list {
-                            LazyVStack(alignment: .leading, spacing: 2) {
-                                ForEach(rows) { row in
-                                    if let fileID = row.fileID {
-                                        rowView(row)
-                                            .id(fileID)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 5)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                            .background(ItemFrameReader(id: fileID))
-                                            .overlay(alignment: .leading) {
-                                                if state.selectedFileID == fileID {
-                                                    RoundedRectangle(cornerRadius: 2)
-                                                        .fill(Theme.copper)
-                                                        .frame(width: 3)
-                                                        .padding(.vertical, 6)
+                    ZStack(alignment: .topLeading) {
+                        Group {
+                            if state.resultLayout == .list {
+                                LazyVStack(alignment: .leading, spacing: 2) {
+                                    ForEach(rows) { row in
+                                        if let fileID = row.fileID {
+                                            rowView(row)
+                                                .id(fileID)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 5)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                                .background(ItemFrameReader(id: fileID))
+                                                .overlay(alignment: .leading) {
+                                                    if state.selectedFileID == fileID {
+                                                        RoundedRectangle(cornerRadius: 2)
+                                                            .fill(Theme.copper)
+                                                            .frame(width: 3)
+                                                            .padding(.vertical, 6)
+                                                    }
                                                 }
-                                            }
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 8)
-                                                    .fill(state.checkedIDs.contains(fileID) || state.selectedFileID == fileID ? Theme.selection : Theme.raised)
-                                            )
-                                    } else {
-                                        rowView(row)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 8)
+                                                        .fill(state.checkedIDs.contains(fileID) || state.selectedFileID == fileID ? Theme.selection : Theme.raised)
+                                                )
+                                        } else {
+                                            rowView(row)
+                                        }
                                     }
                                 }
+                                .padding(8)
+                            } else {
+                                TileBoard(rows: rows, side: state.resultLayout.tile)
+                                    .padding(10)
                             }
-                            .padding(8)
-                        } else {
-                            TileBoard(rows: rows, side: state.resultLayout.tile)
-                                .padding(10)
                         }
+                        DragCatcher(
+                            frames: itemFrames,
+                            checked: state.checkedIDs,
+                            onSelection: { hits, command, base in
+                                state.applyDragSelection(hits, command: command, base: base)
+                            },
+                            onFinish: {
+                                if let id = state.checkedIDs.first { state.selectForPreview(id) }
+                            }
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, minHeight: viewport.height, alignment: .topLeading)
                     .coordinateSpace(name: "atlasList")
                     .onPreferenceChange(ItemFrameKey.self) { itemFrames = $0 }
-                    .overlay(alignment: .topLeading) {
-                        if let dragRect, dragRect.width > 3 || dragRect.height > 3 {
-                            Rectangle()
-                                .fill(Theme.matteBlue.opacity(0.16))
-                                .overlay(Rectangle().stroke(Theme.matteBlue, lineWidth: 1))
-                                .frame(width: max(dragRect.width, 1), height: max(dragRect.height, 1))
-                                .offset(x: dragRect.minX, y: dragRect.minY)
-                                .allowsHitTesting(false)
-                        }
-                    }
-                    .simultaneousGesture(dragSelect)
                 }
                 .background(Theme.inkSoft)
+                .background(
+                    GeometryReader { geo in
+                        Color.clear
+                            .onAppear { viewport = geo.size }
+                            .onChange(of: geo.size) { viewport = $0 }
+                    }
+                )
             }
             .onMoveCommand { direction in
                 switch direction {
@@ -125,30 +132,6 @@ struct FileListView: View {
         let id = ids[next]
         state.selectForPreview(id)
         DispatchQueue.main.async { proxy.scrollTo(id, anchor: nil) }
-    }
-
-    private var dragSelect: some Gesture {
-        DragGesture(minimumDistance: 8, coordinateSpace: .named("atlasList"))
-            .onChanged { value in
-                if !dragArmed {
-                    dragArmed = true
-                    dragBase = state.checkedIDs
-                }
-                let rect = CGRect(
-                    x: min(value.startLocation.x, value.location.x),
-                    y: min(value.startLocation.y, value.location.y),
-                    width: abs(value.location.x - value.startLocation.x),
-                    height: abs(value.location.y - value.startLocation.y)
-                )
-                dragRect = rect
-                let hits = Set(itemFrames.compactMap { id, frame in frame.intersects(rect) ? id : nil })
-                let command = NSEvent.modifierFlags.contains(.command)
-                state.applyDragSelection(hits, command: command, base: dragBase)
-            }
-            .onEnded { _ in
-                dragArmed = false
-                dragRect = nil
-            }
     }
 
     @ViewBuilder
@@ -458,6 +441,111 @@ private struct ItemFrameReader: View {
         GeometryReader { geo in
             Color.clear.preference(key: ItemFrameKey.self, value: [id: geo.frame(in: .named("atlasList"))])
         }
+    }
+}
+
+/// Rubber-band selection that also covers the empty area under and beside the tiles.
+/// The rectangle is drawn in AppKit so the file list is not rebuilt on every pointer move.
+private struct DragCatcher: NSViewRepresentable {
+    var frames: [UUID: CGRect]
+    var checked: Set<UUID>
+    var onSelection: (Set<UUID>, Bool, Set<UUID>) -> Void
+    var onFinish: () -> Void
+
+    func makeNSView(context: Context) -> DragCatcherView {
+        let view = DragCatcherView()
+        view.frames = frames
+        view.checked = checked
+        view.onSelection = onSelection
+        view.onFinish = onFinish
+        return view
+    }
+
+    func updateNSView(_ view: DragCatcherView, context: Context) {
+        view.frames = frames
+        view.checked = checked
+        view.onSelection = onSelection
+        view.onFinish = onFinish
+    }
+}
+
+private final class DragCatcherView: NSView {
+    var frames: [UUID: CGRect] = [:]
+    var checked: Set<UUID> = []
+    var onSelection: ((Set<UUID>, Bool, Set<UUID>) -> Void)?
+    var onFinish: (() -> Void)?
+    private var origin: CGPoint?
+    private var base: Set<UUID> = []
+    private var lastHits: Set<UUID> = []
+    private var band: CGRect?
+    private var monitor: Any?
+    private var didDrag = false
+
+    override var isFlipped: Bool { true }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard monitor == nil, window != nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]) { [weak self] event in
+            self?.handle(event)
+            return event
+        }
+    }
+
+    override func removeFromSuperview() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        super.removeFromSuperview()
+    }
+
+    private func handle(_ event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        switch event.type {
+        case .leftMouseDown:
+            guard bounds.contains(point) else { origin = nil; return }
+            origin = point
+            base = checked
+            lastHits = []
+            didDrag = false
+        case .leftMouseDragged:
+            guard let origin else { return }
+            let rect = CGRect(
+                x: min(origin.x, point.x),
+                y: min(origin.y, point.y),
+                width: abs(point.x - origin.x),
+                height: abs(point.y - origin.y)
+            )
+            guard rect.width > 4 || rect.height > 4 else { return }
+            didDrag = true
+            band = rect
+            needsDisplay = true
+            let hits = Set(frames.compactMap { id, frame in frame.intersects(rect) ? id : nil })
+            if hits != lastHits {
+                lastHits = hits
+                onSelection?(hits, event.modifierFlags.contains(.command), base)
+            }
+        case .leftMouseUp:
+            let finished = didDrag
+            origin = nil
+            band = nil
+            didDrag = false
+            needsDisplay = true
+            if finished { onFinish?() }
+        default:
+            break
+        }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let band else { return }
+        NSColor.systemBlue.withAlphaComponent(0.18).setFill()
+        band.fill()
+        NSColor.systemBlue.setStroke()
+        let path = NSBezierPath(rect: band)
+        path.lineWidth = 1
+        path.stroke()
     }
 }
 
