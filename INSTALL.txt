@@ -1,12 +1,13 @@
-ATLAS v2.1.0 build 14 — Intel Mac
+ATLAS v2.1.1 build 15 — Intel Mac
 
-cd ~/Downloads
-rm -rf ATLAS_v2.0.1_BUILD13_FIXED_x86_64
-unzip -o Atlas_v2.1.0_Build14_x86_64.zip
-cd ATLAS_v2.0.1_BUILD13_FIXED_x86_64
-chmod +x build.sh install_v2.0.1.sh install_v2.0.1_core.sh preflight_v2.0.1.sh
-./install_v2.0.1.sh
+The app is installed to /Applications/Atlas.app. The source folder can stay in Downloads.
 
-The installer asks for your Mac password once (sudo), backs up the old app to ~/Desktop/Atlas_Backups, and does not delete ~/Library/Application Support/Atlas/Results.sqlite.
+From the existing clone:
 
-Header must read v2.1.0. Use the List / Tiles / Large buttons above the file list.
+cd ~/Downloads/Atlas-v2.1.0
+git pull --ff-only
+chmod +x update.sh install_v2.0.1.sh install_v2.0.1_core.sh preflight_v2.0.1.sh build.sh
+./update.sh
+
+Header must read v2.1.1. Click that badge to read the patch notes.
+Click selects one file. Command-click adds or removes. Shift-click selects a range.
