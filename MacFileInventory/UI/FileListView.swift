@@ -2,6 +2,8 @@ import SwiftUI
 import AppKit
 import ImageIO
 import CoreGraphics
+import QuickLookThumbnailing
+import AVFoundation
 
 struct FileListView: View {
     @EnvironmentObject private var state: AppState
@@ -244,8 +246,8 @@ struct FileTile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ZStack(alignment: .topTrailing) {
-                TileThumb(path: display.path, side: side - 16)
-                    .frame(width: side - 16, height: side - 36)
+                TileThumb(path: display.path)
+                    .frame(width: side - 16, height: (side - 16) * 0.78)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 if isBest {
                     Text("BEST")
@@ -295,8 +297,8 @@ struct FileTile: View {
 
 struct TileThumb: View {
     let path: String
-    let side: CGFloat
     @State private var image: NSImage?
+    @State private var failed = false
 
     var body: some View {
         ZStack {
@@ -304,18 +306,23 @@ struct TileThumb: View {
             if let image {
                 Image(nsImage: image)
                     .resizable()
-                    .scaledToFill()
-            } else {
+                    .scaledToFit()
+                    .padding(4)
+            } else if failed {
                 Image(systemName: "doc")
                     .font(.system(size: 22))
                     .foregroundColor(Theme.muted)
+            } else {
+                ProgressView()
+                    .controlSize(.small)
             }
         }
-        .frame(width: side, height: side * 0.72)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
         .task(id: path) {
-            let loaded = await ThumbCache.shared.image(path: path, maxPixel: max(160, side * 2))
+            let loaded = await ThumbCache.shared.image(path: path, maxPixel: 360)
             image = loaded
+            failed = loaded == nil
         }
     }
 }
@@ -323,35 +330,72 @@ struct TileThumb: View {
 final class ThumbCache {
     static let shared = ThumbCache()
     private let cache = NSCache<NSString, NSImage>()
-    private init() { cache.countLimit = 800 }
+    private static let slots = DispatchSemaphore(value: 4)
+    private init() { cache.countLimit = 1200 }
 
     func image(path: String, maxPixel: CGFloat) async -> NSImage? {
         let key = "\(Int(maxPixel))|\(path)" as NSString
         if let hit = cache.object(forKey: key) { return hit }
-        let loaded: NSImage? = await Task.detached(priority: .utility) {
-            ThumbCache.decode(path: path, maxPixel: maxPixel)
+        let cg: CGImage? = await Task.detached(priority: .utility) {
+            ThumbCache.slots.wait()
+            defer { ThumbCache.slots.signal() }
+            return ThumbCache.cgImage(path: path, maxPixel: maxPixel)
         }.value
-        if let loaded { cache.setObject(loaded, forKey: key) }
-        return loaded
+        let image: NSImage?
+        if let cg {
+            image = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+        } else {
+            image = await MainActor.run { NSWorkspace.shared.icon(forFile: path) }
+        }
+        if let image { cache.setObject(image, forKey: key) }
+        return image
     }
 
-    private static func decode(path: String, maxPixel: CGFloat) -> NSImage? {
+    private static func cgImage(path: String, maxPixel: CGFloat) -> CGImage? {
         let url = URL(fileURLWithPath: path)
         let ext = url.pathExtension.lowercased()
-        let imageExt: Set<String> = ["jpg", "jpeg", "png", "heic", "heif", "tif", "tiff", "bmp", "gif", "webp", "jp2"]
-        if imageExt.contains(ext),
-           let src = CGImageSourceCreateWithURL(url as CFURL, nil) {
-            let opts: [CFString: Any] = [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceThumbnailMaxPixelSize: maxPixel,
-                kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceShouldCache: false
-            ]
-            if let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) {
-                return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
-            }
+        let stills: Set<String> = ["jpg", "jpeg", "png", "heic", "heif", "tif", "tiff", "bmp", "gif", "webp", "jp2", "pdf", "psd"]
+        if stills.contains(ext), let still = imageIO(url, maxPixel: maxPixel) { return still }
+        let video: Set<String> = ["mp4", "mov", "m4v", "avi", "mkv", "mpg", "mpeg", "wmv", "flv", "webm", "3gp"]
+        if video.contains(ext), let frame = videoFrame(url, maxPixel: maxPixel) { return frame }
+        return quickLook(url, maxPixel: maxPixel)
+    }
+
+    private static func quickLook(_ url: URL, maxPixel: CGFloat) -> CGImage? {
+        let request = QLThumbnailGenerator.Request(
+            fileAt: url,
+            size: CGSize(width: maxPixel, height: maxPixel),
+            scale: 2,
+            representationTypes: .thumbnail
+        )
+        let gate = DispatchSemaphore(value: 0)
+        var image: CGImage?
+        QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { rep, _ in
+            image = rep?.cgImage
+            gate.signal()
         }
-        return NSWorkspace.shared.icon(forFile: path)
+        _ = gate.wait(timeout: .now() + 2.5)
+        return image
+    }
+
+    private static func imageIO(_ url: URL, maxPixel: CGFloat) -> CGImage? {
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let opts: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(64, maxPixel),
+            kCGImageSourceShouldCacheImmediately: true
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary)
+    }
+
+    private static func videoFrame(_ url: URL, maxPixel: CGFloat) -> CGImage? {
+        let asset = AVAsset(url: url)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: maxPixel, height: maxPixel)
+        let time = CMTime(seconds: 0.4, preferredTimescale: 600)
+        return try? generator.copyCGImage(at: time, actualTime: nil)
     }
 }
 

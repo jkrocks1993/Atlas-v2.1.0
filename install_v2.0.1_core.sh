@@ -2,8 +2,8 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
-EXPECTED_VERSION="2.1.1"
-EXPECTED_BUILD="15"
+EXPECTED_VERSION="2.1.2"
+EXPECTED_BUILD="16"
 APP="$ROOT/build/Atlas.app"
 INSTALL_TARGET="/Applications/Atlas.app"
 BACKUP_DIR="$HOME/Desktop/Atlas_Backups"

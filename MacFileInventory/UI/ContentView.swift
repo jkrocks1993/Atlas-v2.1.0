@@ -137,8 +137,8 @@ struct ContentView: View {
 }
 
 enum ReleaseNotes {
-    static let currentVersion = "2.1.1"
-    static let currentBuild = "15"
+    static let currentVersion = "2.1.2"
+    static let currentBuild = "16"
 
     struct Entry: Identifiable {
         let id: String
@@ -148,6 +148,11 @@ enum ReleaseNotes {
     }
 
     static let history: [Entry] = [
+        Entry(id: "2.1.2", version: "2.1.2", build: "16", lines: [
+            "Tiles and Large tiles now show real thumbnails.",
+            "Photos, image PDFs, and videos use the picture itself, not a blank document icon.",
+            "Other files still show their Finder icon."
+        ]),
         Entry(id: "2.1.1", version: "2.1.1", build: "15", lines: [
             "Selection now works like Finder.",
             "Click a file, with the trackpad or the mouse, to select only that file.",

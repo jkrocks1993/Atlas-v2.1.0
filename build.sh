@@ -14,7 +14,7 @@ mkdir -p "$(dirname "$LOG")"
 rm -f "$LOG" "$ROOT/Build/atlas-build-errors.txt"
 
 echo
-echo "Building ATLAS v2.1.1 Build 15 for Intel x86_64…"
+echo "Building ATLAS v2.1.2 Build 16 for Intel x86_64…"
 echo "Source root: $ROOT"
 echo "DerivedData: $DERIVED"
 echo
@@ -72,8 +72,8 @@ BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")
 EXEC=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$PLIST")
 ARCHS_FOUND=$(lipo -archs "$ATLAS_APP/Contents/MacOS/$EXEC" 2>/dev/null || true)
 
-[[ "$VERSION" == "2.1.1" ]] || { echo "ERROR: Built app version is $VERSION"; exit 1; }
-[[ "$BUILD" == "15" ]] || { echo "ERROR: Built app build is $BUILD"; exit 1; }
+[[ "$VERSION" == "2.1.2" ]] || { echo "ERROR: Built app version is $VERSION"; exit 1; }
+[[ "$BUILD" == "16" ]] || { echo "ERROR: Built app build is $BUILD"; exit 1; }
 [[ "$EXEC" == "Atlas" ]] || { echo "ERROR: Built executable is $EXEC"; exit 1; }
 [[ "$ARCHS_FOUND" == "x86_64" ]] || { echo "ERROR: Built architecture is ${ARCHS_FOUND:-unknown}; expected x86_64"; exit 1; }
 
