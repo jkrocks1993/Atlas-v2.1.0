@@ -3,8 +3,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 
-EXPECTED_VERSION="2.1.3"
-EXPECTED_BUILD="17"
+EXPECTED_VERSION="2.1.4"
+EXPECTED_BUILD="18"
 PROJECT="MacFileInventory.xcodeproj/project.pbxproj"
 XCODE_PROJECT="MacFileInventory.xcodeproj"
 PLIST="MacFileInventory/Info.plist"
