@@ -544,11 +544,8 @@ final class AppState: ObservableObject {
     /// existed when the drag started and adds everything the rectangle touches.
     func applyDragSelection(_ ids: Set<UUID>, command: Bool, base: Set<UUID>) {
         suppressNextPointerSelection = true
-        checkedIDs = command ? base.union(ids) : ids
-        if let id = ids.first {
-            selectionAnchorID = id
-            selectForPreview(id)
-        }
+        let next = command ? base.union(ids) : ids
+        if next != checkedIDs { checkedIDs = next }
     }
 
     func noteCurrentReleaseIfNeeded() {
