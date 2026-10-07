@@ -28,6 +28,11 @@ struct ContentView: View {
             EnhanceSheet()
                 .environmentObject(state)
         }
+        .sheet(isPresented: $state.showReleaseNotes, onDismiss: { state.dismissReleaseNotes() }) {
+            ReleaseNotesSheet()
+                .environmentObject(state)
+        }
+        .onAppear { state.noteCurrentReleaseIfNeeded() }
     }
 
     private var header: some View {
@@ -65,13 +70,16 @@ struct ContentView: View {
     }
 
     private var versionBadge: some View {
-        Text("v2.1.0")
-            .font(.system(size: 10, weight: .bold, design: .rounded))
-            .foregroundColor(.white.opacity(0.82))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(Capsule().fill(Color.white.opacity(0.08)))
-            .help("Atlas v2.1.0 — local learning, tiles and large preview")
+        Button { state.showReleaseNotes = true } label: {
+            Text("v\(ReleaseNotes.currentVersion)")
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundColor(.white.opacity(0.82))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(Color.white.opacity(0.08)))
+        }
+        .buttonStyle(.plain)
+        .help("Atlas v\(ReleaseNotes.currentVersion) — click for what changed")
     }
 
     private var phaseChip: some View {
@@ -117,12 +125,86 @@ struct ContentView: View {
                 ))
                 .disabled(state.selectedFile == nil)
             Spacer()
-            Text("\(state.checkedIDs.count) marked")
+            Text("\(state.checkedIDs.count) selected")
                 .font(.system(size: 11, weight: .medium, design: .rounded))
                 .foregroundColor(Theme.text)
+                .help("Click selects one file. Command-click adds or removes. Shift-click selects the range. Trackpad clicks work the same way. Arrow keys only move the preview.")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(Theme.paperDeep)
+    }
+}
+
+enum ReleaseNotes {
+    static let currentVersion = "2.1.1"
+    static let currentBuild = "15"
+
+    struct Entry: Identifiable {
+        let id: String
+        let version: String
+        let build: String
+        let lines: [String]
+    }
+
+    static let history: [Entry] = [
+        Entry(id: "2.1.1", version: "2.1.1", build: "15", lines: [
+            "Selection now works like Finder.",
+            "Click a file, with the trackpad or the mouse, to select only that file.",
+            "Command-click adds or removes a file without clearing the others.",
+            "Shift-click selects every file from the last anchor to the one you clicked.",
+            "Delete and Move use that selection. Arrow keys still only move the preview.",
+            "This build installs into /Applications/Atlas.app, not Downloads.",
+            "Later updates are patches. The version in the header changes, and the notes are listed here."
+        ]),
+        Entry(id: "2.1.0", version: "2.1.0", build: "14", lines: [
+            "List, tile, and large-tile views, with duplicate groups kept apart.",
+            "Local learning from NOT DUPLICATE and NOT UNIQUE.",
+            "Large-scan results stay in a local SQLite database."
+        ])
+    ]
+}
+
+struct ReleaseNotesSheet: View {
+    @EnvironmentObject private var state: AppState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("ATLAS \(ReleaseNotes.currentVersion)")
+                        .font(.system(size: 20, weight: .semibold, design: .serif))
+                        .foregroundColor(Theme.text)
+                    Text("Build \(ReleaseNotes.currentBuild)  ·  installed in /Applications")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                Button("Close") { state.dismissReleaseNotes() }
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(20)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    ForEach(ReleaseNotes.history) { entry in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("v\(entry.version)  ·  build \(entry.build)")
+                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                .foregroundColor(Theme.copper)
+                            ForEach(entry.lines, id: \.self) { line in
+                                Text("•  \(line)")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(Theme.text)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+            }
+        }
+        .frame(width: 520, height: 420)
+        .background(Theme.paper)
     }
 }
