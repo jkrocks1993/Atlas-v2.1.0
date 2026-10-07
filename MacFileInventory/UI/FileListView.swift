@@ -7,6 +7,10 @@ import AVFoundation
 
 struct FileListView: View {
     @EnvironmentObject private var state: AppState
+    @State private var itemFrames: [UUID: CGRect] = [:]
+    @State private var dragRect: CGRect?
+    @State private var dragBase: Set<UUID> = []
+    @State private var dragArmed = false
 
     var body: some View {
         let rows = state.displayedRows()
@@ -18,37 +22,54 @@ struct FileListView: View {
                 )
                 .frame(width: 1, height: 1)
                 ScrollView {
-                    if state.resultLayout == .list {
-                        LazyVStack(alignment: .leading, spacing: 2) {
-                            ForEach(rows) { row in
-                                if let fileID = row.fileID {
-                                    rowView(row)
-                                        .id(fileID)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 5)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .overlay(alignment: .leading) {
-                                            if state.selectedFileID == fileID {
-                                                RoundedRectangle(cornerRadius: 2)
-                                                    .fill(Theme.copper)
-                                                    .frame(width: 3)
-                                                    .padding(.vertical, 6)
+                    Group {
+                        if state.resultLayout == .list {
+                            LazyVStack(alignment: .leading, spacing: 2) {
+                                ForEach(rows) { row in
+                                    if let fileID = row.fileID {
+                                        rowView(row)
+                                            .id(fileID)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 5)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .background(ItemFrameReader(id: fileID))
+                                            .overlay(alignment: .leading) {
+                                                if state.selectedFileID == fileID {
+                                                    RoundedRectangle(cornerRadius: 2)
+                                                        .fill(Theme.copper)
+                                                        .frame(width: 3)
+                                                        .padding(.vertical, 6)
+                                                }
                                             }
-                                        }
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 8)
-                                                .fill(state.checkedIDs.contains(fileID) || state.selectedFileID == fileID ? Theme.selection : Theme.raised)
-                                        )
-                                } else {
-                                    rowView(row)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 8)
+                                                    .fill(state.checkedIDs.contains(fileID) || state.selectedFileID == fileID ? Theme.selection : Theme.raised)
+                                            )
+                                    } else {
+                                        rowView(row)
+                                    }
                                 }
                             }
+                            .padding(8)
+                        } else {
+                            TileBoard(rows: rows, side: state.resultLayout.tile)
+                                .padding(10)
                         }
-                        .padding(8)
-                    } else {
-                        TileBoard(rows: rows, side: state.resultLayout.tile)
-                            .padding(10)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .coordinateSpace(name: "atlasList")
+                    .onPreferenceChange(ItemFrameKey.self) { itemFrames = $0 }
+                    .overlay(alignment: .topLeading) {
+                        if let dragRect, dragRect.width > 3 || dragRect.height > 3 {
+                            Rectangle()
+                                .fill(Theme.matteBlue.opacity(0.16))
+                                .overlay(Rectangle().stroke(Theme.matteBlue, lineWidth: 1))
+                                .frame(width: max(dragRect.width, 1), height: max(dragRect.height, 1))
+                                .offset(x: dragRect.minX, y: dragRect.minY)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .simultaneousGesture(dragSelect)
                 }
                 .background(Theme.inkSoft)
             }
@@ -104,6 +125,30 @@ struct FileListView: View {
         let id = ids[next]
         state.selectForPreview(id)
         DispatchQueue.main.async { proxy.scrollTo(id, anchor: nil) }
+    }
+
+    private var dragSelect: some Gesture {
+        DragGesture(minimumDistance: 8, coordinateSpace: .named("atlasList"))
+            .onChanged { value in
+                if !dragArmed {
+                    dragArmed = true
+                    dragBase = state.checkedIDs
+                }
+                let rect = CGRect(
+                    x: min(value.startLocation.x, value.location.x),
+                    y: min(value.startLocation.y, value.location.y),
+                    width: abs(value.location.x - value.startLocation.x),
+                    height: abs(value.location.y - value.startLocation.y)
+                )
+                dragRect = rect
+                let hits = Set(itemFrames.compactMap { id, frame in frame.intersects(rect) ? id : nil })
+                let command = NSEvent.modifierFlags.contains(.command)
+                state.applyDragSelection(hits, command: command, base: dragBase)
+            }
+            .onEnded { _ in
+                dragArmed = false
+                dragRect = nil
+            }
     }
 
     @ViewBuilder
@@ -220,6 +265,7 @@ struct TileBoard: View {
                                 if case .best = row { return true }
                                 return display.isBest
                             }())
+                            .background(ItemFrameReader(id: fileID))
                             .id(fileID)
                         }
                     }
@@ -396,6 +442,22 @@ final class ThumbCache {
         generator.maximumSize = CGSize(width: maxPixel, height: maxPixel)
         let time = CMTime(seconds: 0.4, preferredTimescale: 600)
         return try? generator.copyCGImage(at: time, actualTime: nil)
+    }
+}
+
+private struct ItemFrameKey: PreferenceKey {
+    static var defaultValue: [UUID: CGRect] = [:]
+    static func reduce(value: inout [UUID: CGRect], nextValue: () -> [UUID: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { $1 })
+    }
+}
+
+private struct ItemFrameReader: View {
+    let id: UUID
+    var body: some View {
+        GeometryReader { geo in
+            Color.clear.preference(key: ItemFrameKey.self, value: [id: geo.frame(in: .named("atlasList"))])
+        }
     }
 }
 

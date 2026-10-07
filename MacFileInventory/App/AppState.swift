@@ -68,6 +68,7 @@ final class AppState: ObservableObject {
     private var searchGeneration: Int = 0
     @Published var showReleaseNotes: Bool = false
     private var selectionAnchorID: UUID?
+    var suppressNextPointerSelection = false
 
     init() {
         if let url = try? ResultStore.persistentURL(), FileManager.default.fileExists(atPath: url.path), let store = try? ResultStore(url: url) {
@@ -514,6 +515,10 @@ final class AppState: ObservableObject {
     /// Command-click toggles one file. Shift-click selects the inclusive range
     /// from the anchor. Trackpad clicks are the same events as a mouse click.
     func handlePointerSelection(_ id: UUID) {
+        if suppressNextPointerSelection {
+            suppressNextPointerSelection = false
+            return
+        }
         let flags = NSEvent.modifierFlags
         let command = flags.contains(.command)
         let shift = flags.contains(.shift)
@@ -533,6 +538,17 @@ final class AppState: ObservableObject {
         checkedIDs = [id]
         selectionAnchorID = id
         selectForPreview(id)
+    }
+
+    /// Trackpad or mouse drag across files. Command keeps the selection that
+    /// existed when the drag started and adds everything the rectangle touches.
+    func applyDragSelection(_ ids: Set<UUID>, command: Bool, base: Set<UUID>) {
+        suppressNextPointerSelection = true
+        checkedIDs = command ? base.union(ids) : ids
+        if let id = ids.first {
+            selectionAnchorID = id
+            selectForPreview(id)
+        }
     }
 
     func noteCurrentReleaseIfNeeded() {

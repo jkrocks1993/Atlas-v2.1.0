@@ -128,7 +128,7 @@ struct ContentView: View {
             Text("\(state.checkedIDs.count) selected")
                 .font(.system(size: 11, weight: .medium, design: .rounded))
                 .foregroundColor(Theme.text)
-                .help("Click selects one file. Command-click adds or removes. Shift-click selects the range. Trackpad clicks work the same way. Arrow keys only move the preview.")
+                .help("Click selects one file. Drag across files to select several. Command-click or Command-drag adds. Shift-click selects a range. Two-finger scroll still scrolls.")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -137,8 +137,8 @@ struct ContentView: View {
 }
 
 enum ReleaseNotes {
-    static let currentVersion = "2.1.2"
-    static let currentBuild = "16"
+    static let currentVersion = "2.1.3"
+    static let currentBuild = "17"
 
     struct Entry: Identifiable {
         let id: String
@@ -148,6 +148,12 @@ enum ReleaseNotes {
     }
 
     static let history: [Entry] = [
+        Entry(id: "2.1.3", version: "2.1.3", build: "17", lines: [
+            "Drag across files with the trackpad or mouse to select them.",
+            "The blue rectangle selects every file it touches, in the list and in tiles.",
+            "Hold Command while dragging to add to the selection you already have.",
+            "Two-finger scrolling is unchanged."
+        ]),
         Entry(id: "2.1.2", version: "2.1.2", build: "16", lines: [
             "Tiles and Large tiles now show real thumbnails.",
             "Photos, image PDFs, and videos use the picture itself, not a blank document icon.",

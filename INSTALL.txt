@@ -1,4 +1,4 @@
-ATLAS v2.1.2 build 16 — Intel Mac
+ATLAS v2.1.3 build 17 — Intel Mac
 
 The app is installed to /Applications/Atlas.app. The source folder can stay in Downloads.
 
@@ -9,5 +9,5 @@ git pull --ff-only
 chmod +x update.sh install_v2.0.1.sh install_v2.0.1_core.sh preflight_v2.0.1.sh build.sh
 ./update.sh
 
-Header must read v2.1.2. Click that badge to read the patch notes.
+Header must read v2.1.3. Click that badge to read the patch notes.
 Click selects one file. Command-click adds or removes. Shift-click selects a range.
