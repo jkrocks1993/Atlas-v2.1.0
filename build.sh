@@ -3,7 +3,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 
-"$ROOT/preflight_v2.0.1.sh" || exit $?
+/bin/bash "$ROOT/preflight_v2.0.1.sh" || exit $?
 
 DEST="${CONFIGURATION_BUILD_DIR:-$ROOT/build}"
 DERIVED="$ROOT/.xcodeDerivedData"
@@ -14,7 +14,7 @@ mkdir -p "$(dirname "$LOG")"
 rm -f "$LOG" "$ROOT/Build/atlas-build-errors.txt"
 
 echo
-echo "Building ATLAS v2.1.6 Build 20 for Intel x86_64…"
+echo "Building ATLAS v2.1.7 Build 21 for Intel x86_64…"
 echo "Source root: $ROOT"
 echo "DerivedData: $DERIVED"
 echo
@@ -72,8 +72,8 @@ BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")
 EXEC=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$PLIST")
 ARCHS_FOUND=$(lipo -archs "$ATLAS_APP/Contents/MacOS/$EXEC" 2>/dev/null || true)
 
-[[ "$VERSION" == "2.1.6" ]] || { echo "ERROR: Built app version is $VERSION"; exit 1; }
-[[ "$BUILD" == "20" ]] || { echo "ERROR: Built app build is $BUILD"; exit 1; }
+[[ "$VERSION" == "2.1.7" ]] || { echo "ERROR: Built app version is $VERSION"; exit 1; }
+[[ "$BUILD" == "21" ]] || { echo "ERROR: Built app build is $BUILD"; exit 1; }
 [[ "$EXEC" == "Atlas" ]] || { echo "ERROR: Built executable is $EXEC"; exit 1; }
 [[ "$ARCHS_FOUND" == "x86_64" ]] || { echo "ERROR: Built architecture is ${ARCHS_FOUND:-unknown}; expected x86_64"; exit 1; }
 

@@ -1,28 +1,28 @@
 import SwiftUI
 
 enum Theme {
-    static let ink = Color(red: 0.05, green: 0.055, blue: 0.07)
-    static let inkSoft = Color(red: 0.10, green: 0.11, blue: 0.14)
-    static let raised = Color(red: 0.14, green: 0.15, blue: 0.19)
-    static let raised2 = Color(red: 0.20, green: 0.21, blue: 0.26)
-    static let paper = Color(red: 0.07, green: 0.075, blue: 0.09)
-    static let paperDeep = Color(red: 0.04, green: 0.045, blue: 0.055)
-    static let line = Color(red: 0.42, green: 0.36, blue: 0.24)
-    static let matteBlue = Color(red: 0.28, green: 0.58, blue: 0.92)
-    static let matteBluePressed = Color(red: 0.18, green: 0.44, blue: 0.74)
-    static let matteRed = Color(red: 0.90, green: 0.32, blue: 0.30)
-    static let matteRedPressed = Color(red: 0.70, green: 0.20, blue: 0.20)
-    static let copper = Color(red: 0.93, green: 0.74, blue: 0.32)
-    static let progressGreen = Color(red: 0.22, green: 0.86, blue: 0.62)
-    static let progressTrack = Color(red: 0.16, green: 0.17, blue: 0.21)
-    static let separator = Color(red: 0.28, green: 0.26, blue: 0.20)
-    static let cardFill = Color(red: 0.12, green: 0.125, blue: 0.16)
-    static let muted = Color(red: 0.78, green: 0.76, blue: 0.70)
+    static let ink = Color(red: 0.03, green: 0.035, blue: 0.05)
+    static let inkSoft = Color(red: 0.07, green: 0.08, blue: 0.11)
+    static let raised = Color(red: 0.11, green: 0.125, blue: 0.165)
+    static let raised2 = Color(red: 0.16, green: 0.18, blue: 0.24)
+    static let paper = Color(red: 0.045, green: 0.05, blue: 0.07)
+    static let paperDeep = Color(red: 0.025, green: 0.028, blue: 0.04)
+    static let line = Color(red: 0.55, green: 0.46, blue: 0.28).opacity(0.55)
+    static let matteBlue = Color(red: 0.32, green: 0.58, blue: 0.98)
+    static let matteBluePressed = Color(red: 0.20, green: 0.42, blue: 0.82)
+    static let matteRed = Color(red: 0.90, green: 0.32, blue: 0.34)
+    static let matteRedPressed = Color(red: 0.70, green: 0.20, blue: 0.22)
+    static let copper = Color(red: 0.96, green: 0.76, blue: 0.34)
+    static let progressGreen = Color(red: 0.18, green: 0.86, blue: 0.62)
+    static let progressTrack = Color(red: 0.10, green: 0.12, blue: 0.16)
+    static let separator = Color(red: 0.55, green: 0.46, blue: 0.28).opacity(0.45)
+    static let cardFill = Color(red: 0.09, green: 0.10, blue: 0.14)
+    static let muted = Color(red: 0.78, green: 0.80, blue: 0.86)
     static let bestGold = Color(red: 0.98, green: 0.82, blue: 0.38)
-    static let selection = Color(red: 0.28, green: 0.58, blue: 0.92).opacity(0.32)
+    static let selection = Color(red: 0.32, green: 0.58, blue: 0.98).opacity(0.38)
     static let chrome = paper
-    static let text = Color(red: 0.96, green: 0.95, blue: 0.92)
-    static let textDim = Color(red: 0.72, green: 0.71, blue: 0.66)
+    static let text = Color(red: 0.96, green: 0.97, blue: 0.99)
+    static let textDim = Color(red: 0.72, green: 0.75, blue: 0.82)
 
     static let controlHeight: CGFloat = 30
     static let progressHeight: CGFloat = 28
@@ -88,13 +88,14 @@ struct MatteButtonStyle: ButtonStyle {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .stroke(
                         LinearGradient(
-                            colors: [Color.white.opacity(0.28), Color.white.opacity(0.06)],
+                            colors: [Color.white.opacity(0.34), Color.white.opacity(0.05)],
                             startPoint: .top,
                             endPoint: .bottom
                         ),
                         lineWidth: 1
                     )
             )
-            .shadow(color: Color.black.opacity(enabled ? 0.35 : 0.1), radius: 3, y: 1)
+            .shadow(color: (enabled && kind == .normal ? Theme.matteBlue : Color.black).opacity(enabled ? 0.28 : 0.08), radius: configuration.isPressed ? 1 : 6, y: configuration.isPressed ? 0 : 2)
+            .scaleEffect(configuration.isPressed && enabled ? 0.97 : 1)
     }
 }

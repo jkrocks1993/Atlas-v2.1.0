@@ -2,8 +2,8 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
-EXPECTED_VERSION="2.1.6"
-EXPECTED_BUILD="20"
+EXPECTED_VERSION="2.1.7"
+EXPECTED_BUILD="21"
 APP="$ROOT/build/Atlas.app"
 INSTALL_TARGET="/Applications/Atlas.app"
 BACKUP_DIR="$HOME/Desktop/Atlas_Backups"
@@ -17,7 +17,7 @@ echo
 echo "A clean Xcode DerivedData directory will be used."
 echo
 
-"$ROOT/build.sh"
+/bin/bash "$ROOT/build.sh"
 
 [[ -d "$APP" ]] || { echo "ERROR: Verified build app not found: $APP"; exit 1; }
 mkdir -p "$BACKUP_DIR"
