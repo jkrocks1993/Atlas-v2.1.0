@@ -8,5 +8,5 @@ ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.
 echo "ATLAS version: $VERSION"
 echo "ATLAS build:   $BUILD"
 echo "Bundle ID:     $ID"
-[[ "$VERSION" == "2.1.5" && "$BUILD" == "19" ]] || { echo "ERROR: Version/build mismatch."; exit 1; }
-echo "OK: ATLAS v2.1.5 build 19 is installed."
+[[ "$VERSION" == "2.1.6" && "$BUILD" == "20" ]] || { echo "ERROR: Version/build mismatch."; exit 1; }
+echo "OK: ATLAS v2.1.6 build 20 is installed."
