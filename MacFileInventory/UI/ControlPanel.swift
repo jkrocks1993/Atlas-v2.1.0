@@ -26,7 +26,7 @@ struct ControlPanel: View {
             HStack(spacing: 8) {
                 Button("Entire Mac") { state.chooseEntireMac() }
                     .buttonStyle(MatteButtonStyle(kind: state.location.isEntireMac ? .copper : .quiet))
-                Button("Select Folder\u2026") { state.chooseFolder() }
+                Button("Select Folder…") { state.chooseFolder() }
                     .buttonStyle(MatteButtonStyle(kind: state.location.isEntireMac ? .quiet : .normal))
                 Menu {
                     ForEach(state.mountedVolumes, id: \.path) { url in
@@ -35,7 +35,7 @@ struct ControlPanel: View {
                     Divider()
                     Button("Refresh list") { state.refreshVolumes() }
                 } label: {
-                    Text("Mounted drives \u25be")
+                    Text("Mounted drives ▾")
                         .font(.system(size: 12.5, weight: .semibold, design: .rounded))
                         .foregroundColor(Theme.text)
                         .padding(.horizontal, 13)
@@ -50,7 +50,7 @@ struct ControlPanel: View {
 
     private var selectedPath: some View {
         VStack(alignment: .leading, spacing: 3) {
-            SectionLabel(text: state.location.isEntireMac ? "Selected location \u00b7 Entire Mac" : "Selected location")
+            SectionLabel(text: state.location.isEntireMac ? "Selected location · Entire Mac" : "Selected location")
             Text(state.location.displayPath)
                 .font(.system(size: 12, design: .monospaced))
                 .textSelection(.enabled)
@@ -147,7 +147,7 @@ struct ControlPanel: View {
                         Spacer()
                         Text(state.etaLabel.isEmpty
                              ? "\(Int((state.progress * 100).rounded()))%"
-                             : "\(Int((state.progress * 100).rounded()))%  \u00b7  \(state.etaLabel)")
+                             : "\(Int((state.progress * 100).rounded()))%  ·  \(state.etaLabel)")
                             .font(.system(size: 13, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
                             .padding(.trailing, 10)
@@ -187,14 +187,14 @@ struct ControlPanel: View {
     private var categoryStatusText: String {
         let category = state.activeCategory.displayName
         if state.categoryCompleted.contains(state.activeCategory) {
-            return "\(category) released \u2014 results are ready to browse."
+            return "\(category) released — results are ready to browse."
         }
         if state.phase == .scanning || state.phase == .paused {
             let p = Int(((state.categoryProgress[state.activeCategory] ?? 0) * 100).rounded())
-            return "\(category) processing \u2014 \(p)%"
+            return "\(category) processing — \(p)%"
         }
         if state.phase == .stopped {
-            return "Scan stopped \u2014 use the released results; remaining items were not fully verified."
+            return "Scan stopped — use the released results; remaining items were not fully verified."
         }
         return "\(category) is waiting to be processed."
     }

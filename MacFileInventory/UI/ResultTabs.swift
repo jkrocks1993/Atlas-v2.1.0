@@ -162,13 +162,13 @@ struct ResultTabs: View {
     private var statusText: String {
         switch state.phase {
         case .scanning:
-            return state.statusMessage.isEmpty ? "Processing categories \u2014 completed tabs are released immediately." : state.statusMessage
+            return state.statusMessage.isEmpty ? "Processing categories — completed tabs are released immediately." : state.statusMessage
         case .paused:
-            return "Paused \u2014 released tabs remain available."
+            return "Paused — released tabs remain available."
         case .stopped:
-            return "Stopped \u2014 released and partial results remain available."
+            return "Stopped — released and partial results remain available."
         case .completed:
-            return "Scan complete \u2014 all released results are fully available."
+            return "Scan complete — all released results are fully available."
         case .idle:
             return "Start a scan to release results category by category."
         }
