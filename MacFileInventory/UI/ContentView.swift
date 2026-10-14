@@ -148,8 +148,8 @@ struct ContentView: View {
 }
 
 enum ReleaseNotes {
-    static let currentVersion = "2.1.7"
-    static let currentBuild = "21"
+    static let currentVersion = "2.1.8"
+    static let currentBuild = "22"
 
     struct Entry: Identifiable {
         let id: String
@@ -159,6 +159,9 @@ enum ReleaseNotes {
     }
 
     static let history: [Entry] = [
+        Entry(id: "2.1.8", version: "2.1.8", build: "22", lines: [
+            "Arrow keys keep the highlighted file inside the list. Down parks it on the bottom edge. Up parks it on the top edge. A file already on screen does not move the list."
+        ]),
         Entry(id: "2.1.7", version: "2.1.7", build: "21", lines: [
             "Arrow keys now scroll the list with the preview. The highlighted file stays on screen, and the list only moves when that file would leave the top or the bottom.",
             "Visual refresh. Same controls, darker glass layout, brighter selected tabs, hover on rows and tiles, and a moving progress sheen."
@@ -216,7 +219,7 @@ struct ReleaseNotesSheet: View {
                     Text("ATLAS \(ReleaseNotes.currentVersion)")
                         .font(.system(size: 20, weight: .semibold, design: .serif))
                         .foregroundColor(Theme.text)
-                    Text("Build \(ReleaseNotes.currentBuild)  ·  installed in /Applications")
+                    Text("Build \(ReleaseNotes.currentBuild)  \u00b7  installed in /Applications")
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundColor(.secondary)
                 }
@@ -229,11 +232,11 @@ struct ReleaseNotesSheet: View {
                 VStack(alignment: .leading, spacing: 18) {
                     ForEach(ReleaseNotes.history) { entry in
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("v\(entry.version)  ·  build \(entry.build)")
+                            Text("v\(entry.version)  \u00b7  build \(entry.build)")
                                 .font(.system(size: 13, weight: .bold, design: .rounded))
                                 .foregroundColor(Theme.copper)
                             ForEach(entry.lines, id: \.self) { line in
-                                Text("•  \(line)")
+                                Text("\u2022  \(line)")
                                     .font(.system(size: 13))
                                     .foregroundColor(Theme.text)
                                     .fixedSize(horizontal: false, vertical: true)
