@@ -219,7 +219,7 @@ struct ReleaseNotesSheet: View {
                     Text("ATLAS \(ReleaseNotes.currentVersion)")
                         .font(.system(size: 20, weight: .semibold, design: .serif))
                         .foregroundColor(Theme.text)
-                    Text("Build \(ReleaseNotes.currentBuild)  \u00b7  installed in /Applications")
+                    Text("Build \(ReleaseNotes.currentBuild)  ·  installed in /Applications")
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundColor(.secondary)
                 }
@@ -232,11 +232,11 @@ struct ReleaseNotesSheet: View {
                 VStack(alignment: .leading, spacing: 18) {
                     ForEach(ReleaseNotes.history) { entry in
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("v\(entry.version)  \u00b7  build \(entry.build)")
+                            Text("v\(entry.version)  ·  build \(entry.build)")
                                 .font(.system(size: 13, weight: .bold, design: .rounded))
                                 .foregroundColor(Theme.copper)
                             ForEach(entry.lines, id: \.self) { line in
-                                Text("\u2022  \(line)")
+                                Text("•  \(line)")
                                     .font(.system(size: 13))
                                     .foregroundColor(Theme.text)
                                     .fixedSize(horizontal: false, vertical: true)
