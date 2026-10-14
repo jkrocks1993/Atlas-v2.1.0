@@ -48,8 +48,12 @@ struct PreviewPane: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .padding(10)
+        .padding(12)
         .background(Theme.paper)
+        .background(
+            RoundedRectangle(cornerRadius: 0)
+                .fill(Theme.inkSoft)
+        )
         .onChange(of: state.selectedFileID) { _ in
             zoom = 1.0
             zoomAnchor = 1.0

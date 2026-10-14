@@ -35,8 +35,8 @@ struct ResultsPane: View {
                     .padding(.trailing, 6)
                 }
             }
-            .background(RoundedRectangle(cornerRadius: 6).fill(Theme.cardFill))
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.line))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.cardFill))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.white.opacity(0.08)))
             .frame(maxWidth: 300)
             Button("Select All") { state.selectAllVisible() }
                 .buttonStyle(MatteButtonStyle(kind: .quiet))
