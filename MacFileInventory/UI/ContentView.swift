@@ -38,26 +38,27 @@ struct ContentView: View {
     private var header: some View {
         HStack(spacing: 14) {
             ZStack {
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [Theme.copper, Theme.copper.opacity(0.7)],
+                            colors: [Theme.copper, Color(red: 0.98, green: 0.55, blue: 0.28)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
-                    .frame(width: 36, height: 36)
-                    .shadow(color: Theme.copper.opacity(0.35), radius: 8, y: 2)
+                    .frame(width: 40, height: 40)
+                    .shadow(color: Theme.copper.opacity(0.45), radius: 10, y: 3)
                 Image(systemName: "square.stack.3d.up.fill")
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(Theme.ink)
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text("ATLAS")
                     .font(.system(size: 11, weight: .heavy, design: .rounded))
-                    .tracking(3.2)
+                    .tracking(3.4)
                     .foregroundColor(Theme.copper)
                 Text("File Inventory & Duplicates")
-                    .font(.system(size: 17, weight: .semibold, design: .serif))
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
                     .foregroundColor(Theme.text)
             }
             Spacer()
@@ -65,8 +66,14 @@ struct ContentView: View {
             phaseChip
         }
         .padding(.horizontal, 18)
-        .padding(.vertical, 12)
-        .background(Theme.ink)
+        .padding(.vertical, 14)
+        .background(
+            LinearGradient(
+                colors: [Theme.ink, Color(red: 0.05, green: 0.07, blue: 0.12)],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        )
     }
 
     private var versionBadge: some View {
@@ -87,6 +94,7 @@ struct ContentView: View {
             Circle()
                 .fill(phaseColor)
                 .frame(width: 8, height: 8)
+                .shadow(color: phaseColor.opacity(state.phase == .scanning ? 0.9 : 0), radius: 5)
             Text(state.statusMessage.uppercased())
                 .font(.system(size: 11, weight: .bold, design: .rounded))
                 .tracking(0.8)
@@ -109,13 +117,13 @@ struct ContentView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            Button("Delete → Trash") { state.deleteChecked() }
+            Button("Delete \u2192 Trash") { state.deleteChecked() }
                 .buttonStyle(MatteButtonStyle(kind: .destructive, enabled: state.canTrashSelection))
                 .disabled(!state.canTrashSelection)
                 .help(state.phase == .scanning || state.phase == .paused
                       ? "While a scan is running, only inferior duplicates of a finished tab can be deleted. BEST stays so later tabs can still match it."
                       : "Move the checked files to Trash.")
-            Button("Move…") { state.requestMove() }
+            Button("Move\u2026") { state.requestMove() }
                 .buttonStyle(MatteButtonStyle(kind: .normal, enabled: !state.checkedIDs.isEmpty && state.phase != .scanning && state.phase != .paused))
                 .disabled(state.checkedIDs.isEmpty || state.phase == .scanning || state.phase == .paused)
             Button("Go to Folder") { state.revealSelectedInFinder() }
@@ -140,8 +148,8 @@ struct ContentView: View {
 }
 
 enum ReleaseNotes {
-    static let currentVersion = "2.1.6"
-    static let currentBuild = "20"
+    static let currentVersion = "2.1.7"
+    static let currentBuild = "21"
 
     struct Entry: Identifiable {
         let id: String
@@ -151,6 +159,10 @@ enum ReleaseNotes {
     }
 
     static let history: [Entry] = [
+        Entry(id: "2.1.7", version: "2.1.7", build: "21", lines: [
+            "Arrow keys now scroll the list with the preview. The highlighted file stays on screen, and the list only moves when that file would leave the top or the bottom.",
+            "Visual refresh. Same controls, darker glass layout, brighter selected tabs, hover on rows and tiles, and a moving progress sheen."
+        ]),
         Entry(id: "2.1.6", version: "2.1.6", build: "20", lines: [
             "Fixed the 2.1.5 build error. The app compiles again.",
             "Everything from 2.1.5 is included: tile arrow keys, preview that does not clear a selection, comparison ETA, and delete for inferior duplicates of a finished tab."
@@ -204,7 +216,7 @@ struct ReleaseNotesSheet: View {
                     Text("ATLAS \(ReleaseNotes.currentVersion)")
                         .font(.system(size: 20, weight: .semibold, design: .serif))
                         .foregroundColor(Theme.text)
-                    Text("Build \(ReleaseNotes.currentBuild)  ·  installed in /Applications")
+                    Text("Build \(ReleaseNotes.currentBuild)  \u00b7  installed in /Applications")
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundColor(.secondary)
                 }
@@ -217,11 +229,11 @@ struct ReleaseNotesSheet: View {
                 VStack(alignment: .leading, spacing: 18) {
                     ForEach(ReleaseNotes.history) { entry in
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("v\(entry.version)  ·  build \(entry.build)")
+                            Text("v\(entry.version)  \u00b7  build \(entry.build)")
                                 .font(.system(size: 13, weight: .bold, design: .rounded))
                                 .foregroundColor(Theme.copper)
                             ForEach(entry.lines, id: \.self) { line in
-                                Text("•  \(line)")
+                                Text("\u2022  \(line)")
                                     .font(.system(size: 13))
                                     .foregroundColor(Theme.text)
                                     .fixedSize(horizontal: false, vertical: true)
