@@ -117,13 +117,13 @@ struct ContentView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            Button("Delete \u2192 Trash") { state.deleteChecked() }
+            Button("Delete → Trash") { state.deleteChecked() }
                 .buttonStyle(MatteButtonStyle(kind: .destructive, enabled: state.canTrashSelection))
                 .disabled(!state.canTrashSelection)
                 .help(state.phase == .scanning || state.phase == .paused
                       ? "While a scan is running, only inferior duplicates of a finished tab can be deleted. BEST stays so later tabs can still match it."
                       : "Move the checked files to Trash.")
-            Button("Move\u2026") { state.requestMove() }
+            Button("Move…") { state.requestMove() }
                 .buttonStyle(MatteButtonStyle(kind: .normal, enabled: !state.checkedIDs.isEmpty && state.phase != .scanning && state.phase != .paused))
                 .disabled(state.checkedIDs.isEmpty || state.phase == .scanning || state.phase == .paused)
             Button("Go to Folder") { state.revealSelectedInFinder() }
@@ -216,7 +216,7 @@ struct ReleaseNotesSheet: View {
                     Text("ATLAS \(ReleaseNotes.currentVersion)")
                         .font(.system(size: 20, weight: .semibold, design: .serif))
                         .foregroundColor(Theme.text)
-                    Text("Build \(ReleaseNotes.currentBuild)  \u00b7  installed in /Applications")
+                    Text("Build \(ReleaseNotes.currentBuild)  ·  installed in /Applications")
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundColor(.secondary)
                 }
@@ -229,11 +229,11 @@ struct ReleaseNotesSheet: View {
                 VStack(alignment: .leading, spacing: 18) {
                     ForEach(ReleaseNotes.history) { entry in
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("v\(entry.version)  \u00b7  build \(entry.build)")
+                            Text("v\(entry.version)  ·  build \(entry.build)")
                                 .font(.system(size: 13, weight: .bold, design: .rounded))
                                 .foregroundColor(Theme.copper)
                             ForEach(entry.lines, id: \.self) { line in
-                                Text("\u2022  \(line)")
+                                Text("•  \(line)")
                                     .font(.system(size: 13))
                                     .foregroundColor(Theme.text)
                                     .fixedSize(horizontal: false, vertical: true)
