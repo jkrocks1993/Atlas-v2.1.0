@@ -25,7 +25,7 @@ struct FileListView: View {
             .frame(width: 1, height: 1)
             ScrollView {
                     ZStack(alignment: .topLeading) {
-                        ScrollDriver(request: scrollRequest)
+                        ScrollDriver(request: scrollRequest, frames: itemFrames)
                             .frame(width: 1, height: 1)
                             .allowsHitTesting(false)
                         Group {
@@ -39,6 +39,7 @@ struct FileListView: View {
                                                 .padding(.vertical, 5)
                                                 .frame(maxWidth: .infinity, alignment: .leading)
                                                 .background(ItemFrameReader(id: fileID))
+                                                .background(RowAnchor(id: fileID))
                                                 .overlay(alignment: .leading) {
                                                     if state.selectedFileID == fileID {
                                                         RoundedRectangle(cornerRadius: 2)
@@ -163,7 +164,7 @@ struct FileListView: View {
             let nextCol = col + dx
             let sameRow = row * cols + nextCol
             if nextCol >= 0 && nextCol < cols && sameRow < band.count {
-                preview(band[sameRow], direction: dx)
+                preview(band[sameRow], direction: 0)
                 return
             }
             if dx > 0, place.band + 1 < bands.count {
@@ -198,17 +199,17 @@ struct FileListView: View {
         preview(ids[next], direction: delta)
     }
 
-    /// Arrow keys already change the preview. This moves the list only when that
-    /// file would leave the window: down keeps it at the bottom edge, up at the top.
-    /// A file already on screen does not move the list.
+    /// Arrow keys already change the preview. The list moves only when that
+    /// file would leave the window: down parks it on the bottom edge, up on the top.
     private func preview(_ id: UUID, direction: Int) {
         guard state.selectedFileID != id else { return }
         state.selectForPreview(id)
         var request = ScrollRequest()
         request.token = scrollRequest.token + 1
-        request.direction = direction == 0 ? 1 : direction
-        request.estimate = rowEstimate
-        if let frame = itemFrames[id] {
+        request.fileID = id
+        request.direction = direction == 0 ? 0 : (direction > 0 ? 1 : -1)
+        request.fallbackHeight = rowEstimate
+        if let frame = itemFrames[id], frame.height > 4, frame.height < 2000 {
             request.hasFrame = true
             request.frame = frame
         }
@@ -223,12 +224,11 @@ struct FileListView: View {
     }
 
     private var rowEstimate: CGFloat {
+        if let measured = RowAnchors.typicalHeight() { return measured }
         if state.resultLayout != .list {
-            return state.resultLayout.tile + 28
+            return min(320, state.resultLayout.tile + 28)
         }
-        let heights = itemFrames.values.map(\.height).filter { $0 > 12 }
-        if let height = heights.max() { return height + 8 }
-        return 48
+        return 46
     }
 
     private func tileBands() -> [[UUID]] {
@@ -382,6 +382,7 @@ struct TileBoard: View {
                                 return display.isBest
                             }())
                             .background(ItemFrameReader(id: fileID))
+                            .background(RowAnchor(id: fileID))
                             .id(fileID)
                         }
                     }
@@ -569,88 +570,225 @@ final class ThumbCache {
 private struct ScrollRequest: Equatable {
     var token = 0
     var pinToTop = false
+    var fileID: UUID?
+    var direction = 0
+    var fallbackHeight: CGFloat = 46
     var hasFrame = false
     var frame = CGRect.zero
-    var direction = 1
-    var estimate: CGFloat = 48
 }
 
-/// Scrolls the real AppKit list. SwiftUI's scrollTo is ignored when it is called
-/// from the arrow-key monitor, which left the highlight moving and the list stuck.
+/// Scrolls the real AppKit list so the highlighted file stays inside the window.
+/// SwiftUI frames are not used as document coordinates — those were landing the
+/// highlight outside the visible clip. Each row has an anchor view, and the clip
+/// is moved by the measured overflow only.
 private struct ScrollDriver: NSViewRepresentable {
     var request: ScrollRequest
+    var frames: [UUID: CGRect]
 
     func makeNSView(context: Context) -> ScrollDriverView {
         let view = ScrollDriverView()
         view.request = request
+        view.frames = frames
         return view
     }
 
     func updateNSView(_ view: ScrollDriverView, context: Context) {
         let changed = view.request.token != request.token
         view.request = request
+        view.frames = frames
         if changed { view.reveal() }
     }
 }
 
 private final class ScrollDriverView: NSView {
     var request = ScrollRequest()
+    var frames: [UUID: CGRect] = [:]
     override var isFlipped: Bool { true }
 
     func reveal() {
         let request = self.request
         DispatchQueue.main.async { [weak self] in
-            self?.revealNow(request)
+            guard let self, self.request.token == request.token else { return }
+            self.revealNow(request, attempt: 0, previousOverflow: nil)
         }
     }
 
-    private func revealNow(_ request: ScrollRequest) {
-        guard let scroll = enclosingScrollView else { return }
+    private func revealNow(_ request: ScrollRequest, attempt: Int, previousOverflow: CGFloat?) {
+        guard request.token == self.request.token else { return }
+        guard let scroll = enclosingScrollView else {
+            retry(request, attempt: attempt, previousOverflow: previousOverflow)
+            return
+        }
+        let clip = scroll.contentView
         if request.pinToTop {
-            let clip = scroll.contentView
-            let y: CGFloat
+            var origin = clip.bounds.origin
             if clip.isFlipped {
-                y = 0
+                origin.y = 0
             } else {
-                let docH = scroll.documentView?.frame.height ?? 0
-                y = max(0, docH - clip.bounds.height)
+                let docH = scroll.documentView?.bounds.height ?? clip.bounds.height
+                origin.y = max(0, docH - clip.bounds.height)
             }
-            clip.scroll(to: NSPoint(x: 0, y: y))
-            scroll.reflectScrolledClipView(clip)
+            origin.x = 0
+            apply(origin, clip: clip, scroll: scroll)
             return
         }
-        if request.hasFrame, let doc = scroll.documentView,
-           request.frame.height > 8, request.frame.height < 800 {
-            let origin = convert(CGPoint.zero, to: doc)
-            let rect = NSRect(
-                x: origin.x + request.frame.minX,
-                y: origin.y + request.frame.minY,
-                width: max(1, request.frame.width),
-                height: max(1, request.frame.height)
-            )
-            let clip = scroll.contentView
-            let before = clip.bounds.origin
-            doc.scrollToVisible(rect)
-            let moved = abs(clip.bounds.origin.x - before.x) > 0.5 || abs(clip.bounds.origin.y - before.y) > 0.5
-            let visible = clip.bounds.insetBy(dx: -4, dy: -4)
-            if !moved && !visible.intersects(rect) {
-                nudge(request, in: scroll)
+        guard let id = request.fileID else { return }
+        if let item = itemWindowRect(id, request: request), item.height > 4, item.width > 4 {
+            let visible = clip.convert(clip.bounds, to: nil)
+            guard visible.height > 4 else {
+                retry(request, attempt: attempt, previousOverflow: previousOverflow)
+                return
             }
+            let below = visible.minY - item.minY
+            let above = item.maxY - visible.maxY
+            if below <= 1, above <= 1 { return }
+            let overflow = max(below, above)
+            if let previousOverflow, attempt > 0, abs(overflow - previousOverflow) < 2 {
+                if attempt < 3 { retry(request, attempt: attempt, previousOverflow: overflow) }
+                return
+            }
+            var origin = clip.bounds.origin
+            if item.height >= visible.height - 8 {
+                let delta = item.maxY - visible.maxY
+                origin.y += clip.isFlipped ? -delta : delta
+            } else if below > 1 {
+                origin.y += clip.isFlipped ? below : -below
+            } else if above > 1 {
+                origin.y += clip.isFlipped ? -above : above
+            } else {
+                return
+            }
+            apply(origin, clip: clip, scroll: scroll)
+            if attempt < 2 { retry(request, attempt: attempt, previousOverflow: overflow) }
             return
         }
+        guard attempt < 8, request.direction != 0 else { return }
         nudge(request, in: scroll)
+        retry(request, attempt: attempt, previousOverflow: previousOverflow)
+    }
+
+    /// The file's rectangle in window coordinates, where Y grows upward.
+    /// The row anchor is measured directly. A SwiftUI frame is used only after it
+    /// has been lined up against a row that is already on screen.
+    private func itemWindowRect(_ id: UUID, request: ScrollRequest) -> CGRect? {
+        if let anchor = RowAnchors.view(for: id), anchor.window != nil {
+            let rect = anchor.convert(anchor.bounds, to: nil)
+            if rect.height > 4, rect.width > 4 { return rect }
+        }
+        guard request.hasFrame, request.frame.height > 4, request.frame.height < 2000 else { return nil }
+        for (otherID, other) in frames {
+            guard other.height > 8, other.height < 800,
+                  let anchor = RowAnchors.view(for: otherID), anchor.window != nil else { continue }
+            let live = anchor.convert(anchor.bounds, to: nil)
+            guard live.height > 4 else { continue }
+            let scale = live.height / other.height
+            guard scale > 0.5, scale < 2 else { continue }
+            let delta = live.minY - other.minY * scale
+            return CGRect(
+                x: live.minX,
+                y: request.frame.minY * scale + delta,
+                width: max(1, request.frame.width),
+                height: max(1, request.frame.height * scale)
+            )
+        }
+        return nil
     }
 
     private func nudge(_ request: ScrollRequest, in scroll: NSScrollView) {
         let clip = scroll.contentView
         var origin = clip.bounds.origin
-        let delta = request.estimate * CGFloat(request.direction == 0 ? 1 : request.direction)
+        let step = min(max(request.fallbackHeight, 24), 220)
+        let delta = step * CGFloat(request.direction > 0 ? 1 : -1)
         origin.y += clip.isFlipped ? delta : -delta
-        let docH = scroll.documentView?.frame.height ?? clip.bounds.height
+        apply(origin, clip: clip, scroll: scroll)
+    }
+
+    private func apply(_ origin: NSPoint, clip: NSClipView, scroll: NSScrollView) {
+        var origin = origin
+        let docH = scroll.documentView?.bounds.height ?? clip.bounds.height
         let limit = max(0, docH - clip.bounds.height)
         origin.y = min(max(0, origin.y), limit)
+        origin.x = clip.bounds.origin.x
+        if abs(origin.y - clip.bounds.origin.y) < 0.5 { return }
         clip.scroll(to: origin)
         scroll.reflectScrolledClipView(clip)
+    }
+
+    private func retry(_ request: ScrollRequest, attempt: Int, previousOverflow: CGFloat?) {
+        let next = attempt + 1
+        guard next <= 8 else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.request.token == request.token else { return }
+            self.revealNow(request, attempt: next, previousOverflow: previousOverflow)
+        }
+    }
+}
+
+private final class RowAnchorBox {
+    weak var view: RowAnchorView?
+    init(_ view: RowAnchorView) { self.view = view }
+}
+
+private enum RowAnchors {
+    static var boxes: [UUID: RowAnchorBox] = [:]
+
+    static func register(_ view: RowAnchorView) {
+        boxes[view.fileID] = RowAnchorBox(view)
+    }
+
+    static func unregister(_ view: RowAnchorView) {
+        if boxes[view.fileID]?.view === view {
+            boxes.removeValue(forKey: view.fileID)
+        }
+    }
+
+    static func view(for id: UUID) -> RowAnchorView? {
+        guard let view = boxes[id]?.view, view.window != nil, view.bounds.height > 1 else { return nil }
+        return view
+    }
+
+    static func typicalHeight() -> CGFloat? {
+        let heights = boxes.values.compactMap { $0.view?.bounds.height }.filter { $0 > 16 && $0 < 400 }
+        guard !heights.isEmpty else { return nil }
+        return heights.reduce(0, +) / CGFloat(heights.count)
+    }
+}
+
+private struct RowAnchor: NSViewRepresentable {
+    var id: UUID
+
+    func makeNSView(context: Context) -> RowAnchorView {
+        let view = RowAnchorView()
+        view.fileID = id
+        RowAnchors.register(view)
+        return view
+    }
+
+    func updateNSView(_ view: RowAnchorView, context: Context) {
+        if view.fileID != id {
+            RowAnchors.unregister(view)
+            view.fileID = id
+        }
+        RowAnchors.register(view)
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: RowAnchorView, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? 8, height: proposal.height ?? 8)
+    }
+}
+
+private final class RowAnchorView: NSView {
+    var fileID: UUID = UUID()
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { RowAnchors.register(self) }
+        else { RowAnchors.unregister(self) }
+    }
+    override func removeFromSuperview() {
+        RowAnchors.unregister(self)
+        super.removeFromSuperview()
     }
 }
 
