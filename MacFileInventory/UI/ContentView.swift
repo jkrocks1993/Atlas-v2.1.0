@@ -140,8 +140,8 @@ struct ContentView: View {
 }
 
 enum ReleaseNotes {
-    static let currentVersion = "2.1.5"
-    static let currentBuild = "19"
+    static let currentVersion = "2.1.6"
+    static let currentBuild = "20"
 
     struct Entry: Identifiable {
         let id: String
@@ -151,6 +151,10 @@ enum ReleaseNotes {
     }
 
     static let history: [Entry] = [
+        Entry(id: "2.1.6", version: "2.1.6", build: "20", lines: [
+            "Fixed the 2.1.5 build error. The app compiles again.",
+            "Everything from 2.1.5 is included: tile arrow keys, preview that does not clear a selection, comparison ETA, and delete for inferior duplicates of a finished tab."
+        ]),
         Entry(id: "2.1.5", version: "2.1.5", build: "19", lines: [
             "Arrow keys move one tile at a time, including left and right. Preview no longer clears a selection.",
             "Select Duplicates stays checked while you preview other files.",
