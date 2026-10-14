@@ -1,4 +1,4 @@
-ATLAS v2.1.5 — Build 19 — Intel x86_64
+ATLAS v2.1.6 — Build 20 — Intel x86_64
 
 List, Tiles, and Large views. Duplicate groups stay separated by a thick rule in every view.
 Local pair model keeps learning from NOT DUPLICATE / NOT UNIQUE. No cloud.
