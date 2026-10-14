@@ -10,3 +10,4 @@ bash install_v2.0.1.sh
 
 Header must read v2.1.8. Click that badge to read the patch notes.
 Arrow keys keep the highlighted file inside the visible list.
+
