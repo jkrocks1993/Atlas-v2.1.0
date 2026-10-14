@@ -69,6 +69,11 @@ struct ResultTabs: View {
                             }
                         }
                         .frame(width: 154, height: 29)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .stroke(Color.white.opacity(selected ? 0.55 : 0), lineWidth: 1)
+                        )
+                        .shadow(color: selected ? Theme.matteBlue.opacity(0.55) : .clear, radius: selected ? 8 : 0, y: 0)
                     }
                     .buttonStyle(.plain)
                     .disabled(!enabled)
@@ -157,13 +162,13 @@ struct ResultTabs: View {
     private var statusText: String {
         switch state.phase {
         case .scanning:
-            return state.statusMessage.isEmpty ? "Processing categories — completed tabs are released immediately." : state.statusMessage
+            return state.statusMessage.isEmpty ? "Processing categories \u2014 completed tabs are released immediately." : state.statusMessage
         case .paused:
-            return "Paused — released tabs remain available."
+            return "Paused \u2014 released tabs remain available."
         case .stopped:
-            return "Stopped — released and partial results remain available."
+            return "Stopped \u2014 released and partial results remain available."
         case .completed:
-            return "Scan complete — all released results are fully available."
+            return "Scan complete \u2014 all released results are fully available."
         case .idle:
             return "Start a scan to release results category by category."
         }

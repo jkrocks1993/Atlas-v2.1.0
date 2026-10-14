@@ -26,7 +26,7 @@ struct ControlPanel: View {
             HStack(spacing: 8) {
                 Button("Entire Mac") { state.chooseEntireMac() }
                     .buttonStyle(MatteButtonStyle(kind: state.location.isEntireMac ? .copper : .quiet))
-                Button("Select Folder…") { state.chooseFolder() }
+                Button("Select Folder\u2026") { state.chooseFolder() }
                     .buttonStyle(MatteButtonStyle(kind: state.location.isEntireMac ? .quiet : .normal))
                 Menu {
                     ForEach(state.mountedVolumes, id: \.path) { url in
@@ -35,7 +35,7 @@ struct ControlPanel: View {
                     Divider()
                     Button("Refresh list") { state.refreshVolumes() }
                 } label: {
-                    Text("Mounted drives ▾")
+                    Text("Mounted drives \u25be")
                         .font(.system(size: 12.5, weight: .semibold, design: .rounded))
                         .foregroundColor(Theme.text)
                         .padding(.horizontal, 13)
@@ -50,7 +50,7 @@ struct ControlPanel: View {
 
     private var selectedPath: some View {
         VStack(alignment: .leading, spacing: 3) {
-            SectionLabel(text: state.location.isEntireMac ? "Selected location · Entire Mac" : "Selected location")
+            SectionLabel(text: state.location.isEntireMac ? "Selected location \u00b7 Entire Mac" : "Selected location")
             Text(state.location.displayPath)
                 .font(.system(size: 12, design: .monospaced))
                 .textSelection(.enabled)
@@ -125,8 +125,19 @@ struct ControlPanel: View {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(Theme.progressTrack)
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(Theme.progressGreen)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color(red: 0.05, green: 0.55, blue: 0.42), Theme.progressGreen],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
                         .frame(width: max(0, geo.size.width * CGFloat(state.progress)))
+                    if state.phase == .scanning {
+                        ProgressSheen()
+                            .frame(width: max(0, geo.size.width * CGFloat(state.progress)))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
                     HStack {
                         Text("PROGRESS")
                             .font(.system(size: 9, weight: .bold, design: .rounded))
@@ -136,7 +147,7 @@ struct ControlPanel: View {
                         Spacer()
                         Text(state.etaLabel.isEmpty
                              ? "\(Int((state.progress * 100).rounded()))%"
-                             : "\(Int((state.progress * 100).rounded()))%  ·  \(state.etaLabel)")
+                             : "\(Int((state.progress * 100).rounded()))%  \u00b7  \(state.etaLabel)")
                             .font(.system(size: 13, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
                             .padding(.trailing, 10)
@@ -176,14 +187,14 @@ struct ControlPanel: View {
     private var categoryStatusText: String {
         let category = state.activeCategory.displayName
         if state.categoryCompleted.contains(state.activeCategory) {
-            return "\(category) released — results are ready to browse."
+            return "\(category) released \u2014 results are ready to browse."
         }
         if state.phase == .scanning || state.phase == .paused {
             let p = Int(((state.categoryProgress[state.activeCategory] ?? 0) * 100).rounded())
-            return "\(category) processing — \(p)%"
+            return "\(category) processing \u2014 \(p)%"
         }
         if state.phase == .stopped {
-            return "Scan stopped — use the released results; remaining items were not fully verified."
+            return "Scan stopped \u2014 use the released results; remaining items were not fully verified."
         }
         return "\(category) is waiting to be processed."
     }
@@ -196,5 +207,27 @@ struct ControlPanel: View {
                 .padding(.vertical, 2)
         }
         .frame(height: 20)
+    }
+}
+
+private struct ProgressSheen: View {
+    @State private var shift = false
+
+    var body: some View {
+        GeometryReader { geo in
+            LinearGradient(
+                colors: [Color.white.opacity(0), Color.white.opacity(0.42), Color.white.opacity(0)],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .frame(width: 90)
+            .offset(x: shift ? geo.size.width : -90)
+            .onAppear {
+                withAnimation(.linear(duration: 1.35).repeatForever(autoreverses: false)) {
+                    shift = true
+                }
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
