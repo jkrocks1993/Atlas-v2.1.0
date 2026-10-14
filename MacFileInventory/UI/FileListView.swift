@@ -11,20 +11,23 @@ struct FileListView: View {
     @State private var viewport: CGSize = CGSize(width: 640, height: 480)
     @State private var lastNavStamp: TimeInterval = 0
     @State private var lastNavKey: String = ""
+    @State private var scrollRequest = ScrollRequest()
 
     var body: some View {
         let rows = state.displayedRows()
-        ScrollViewReader { proxy in
-            ZStack(alignment: .topLeading) {
-                ArrowKeyHost(
-                    onUp: { move(dx: 0, dy: -1, proxy: proxy) },
-                    onDown: { move(dx: 0, dy: 1, proxy: proxy) },
-                    onLeft: { move(dx: -1, dy: 0, proxy: proxy) },
-                    onRight: { move(dx: 1, dy: 0, proxy: proxy) }
-                )
-                .frame(width: 1, height: 1)
-                ScrollView {
+        ZStack(alignment: .topLeading) {
+            ArrowKeyHost(
+                onUp: { move(dx: 0, dy: -1) },
+                onDown: { move(dx: 0, dy: 1) },
+                onLeft: { move(dx: -1, dy: 0) },
+                onRight: { move(dx: 1, dy: 0) }
+            )
+            .frame(width: 1, height: 1)
+            ScrollView {
                     ZStack(alignment: .topLeading) {
+                        ScrollDriver(request: scrollRequest)
+                            .frame(width: 1, height: 1)
+                            .allowsHitTesting(false)
                         Group {
                             if state.resultLayout == .list {
                                 LazyVStack(alignment: .leading, spacing: 2) {
@@ -81,6 +84,7 @@ struct FileListView: View {
                         if changed { itemFrames = frames }
                     }
                 }
+                .scrollIndicators(.visible)
                 .background(Theme.inkSoft)
                 .background(
                     GeometryReader { geo in
@@ -92,19 +96,19 @@ struct FileListView: View {
             }
             .onMoveCommand { direction in
                 switch direction {
-                case .up: move(dx: 0, dy: -1, proxy: proxy)
-                case .down: move(dx: 0, dy: 1, proxy: proxy)
-                case .left: move(dx: -1, dy: 0, proxy: proxy)
-                case .right: move(dx: 1, dy: 0, proxy: proxy)
+                case .up: move(dx: 0, dy: -1)
+                case .down: move(dx: 0, dy: 1)
+                case .left: move(dx: -1, dy: 0)
+                case .right: move(dx: 1, dy: 0)
                 default: break
                 }
             }
             .onAppear {
                 if state.phase == .completed && rows.isEmpty { state.reloadRows() }
-                jumpToTop(rows: rows, proxy: proxy)
+                jumpToTop(rows: rows)
             }
             .onChange(of: state.rowResetGeneration) { _ in
-                jumpToTop(rows: state.displayedRows(), proxy: proxy)
+                jumpToTop(rows: state.displayedRows())
             }
             .onChange(of: state.activeCategory) { _ in
                 state.reloadRows(preserveVisible: false)
@@ -118,10 +122,9 @@ struct FileListView: View {
             .onChange(of: state.searchText) { _ in state.scheduleSearchReload() }
             .onChange(of: state.sortField) { _ in state.reloadRows(preserveVisible: false) }
             .onChange(of: state.sortDirection) { _ in state.reloadRows(preserveVisible: false) }
-        }
     }
 
-    private func jumpToTop(rows: [ListRow], proxy: ScrollViewProxy) {
+    private func jumpToTop(rows: [ListRow]) {
         let ids = rows.compactMap(\.fileID)
         guard let first = ids.first else { return }
         // Preserve the current selection when the result store refreshes. This prevents
@@ -129,12 +132,12 @@ struct FileListView: View {
         if state.selectedFileID == nil || !ids.contains(state.selectedFileID!) {
             state.selectForPreview(first)
             DispatchQueue.main.async {
-                proxy.scrollTo(first, anchor: UnitPoint.top)
+                self.pinListToTop()
             }
         }
     }
 
-    private func move(dx: Int, dy: Int, proxy: ScrollViewProxy) {
+    private func move(dx: Int, dy: Int) {
         let key = "\(dx),\(dy)"
         let now = ProcessInfo.processInfo.systemUptime
         if key == lastNavKey && now - lastNavStamp < 0.02 { return }
@@ -145,12 +148,12 @@ struct FileListView: View {
         guard !flat.isEmpty else { return }
         if state.resultLayout == .list || (dx == 0 && dy == 0) {
             let step = dy != 0 ? dy : dx
-            stepLinear(step, ids: flat, proxy: proxy)
+            stepLinear(step, ids: flat)
             return
         }
         let cols = tileColumns()
         guard let current = state.selectedFileID, let place = locate(current, in: bands) else {
-            preview(flat[0], proxy: proxy)
+            preview(flat[0], direction: dy != 0 ? dy : dx)
             return
         }
         let band = bands[place.band]
@@ -160,45 +163,72 @@ struct FileListView: View {
             let nextCol = col + dx
             let sameRow = row * cols + nextCol
             if nextCol >= 0 && nextCol < cols && sameRow < band.count {
-                preview(band[sameRow], proxy: proxy)
+                preview(band[sameRow], direction: dx)
                 return
             }
             if dx > 0, place.band + 1 < bands.count {
-                preview(bands[place.band + 1][0], proxy: proxy)
+                preview(bands[place.band + 1][0], direction: 1)
             } else if dx < 0, place.band > 0 {
-                preview(bands[place.band - 1].last!, proxy: proxy)
+                preview(bands[place.band - 1].last!, direction: -1)
             }
             return
         }
         let nextRow = row + dy
         let rowsInBand = max(1, (band.count + cols - 1) / cols)
         if nextRow >= 0 && nextRow < rowsInBand && nextRow * cols < band.count {
-            preview(band[min(nextRow * cols + col, band.count - 1)], proxy: proxy)
+            preview(band[min(nextRow * cols + col, band.count - 1)], direction: dy)
             return
         }
         if dy > 0, place.band + 1 < bands.count {
             let next = bands[place.band + 1]
-            preview(next[min(col, next.count - 1)], proxy: proxy)
+            preview(next[min(col, next.count - 1)], direction: 1)
         } else if dy < 0, place.band > 0 {
             let prev = bands[place.band - 1]
             let prevRows = max(1, (prev.count + cols - 1) / cols)
             let idx = min((prevRows - 1) * cols + col, prev.count - 1)
-            preview(prev[max(0, idx)], proxy: proxy)
+            preview(prev[max(0, idx)], direction: -1)
         }
     }
 
-    private func stepLinear(_ delta: Int, ids: [UUID], proxy: ScrollViewProxy) {
+    private func stepLinear(_ delta: Int, ids: [UUID]) {
         let current = state.selectedFileID.flatMap { ids.firstIndex(of: $0) } ?? -1
         var next = current + delta
         if current < 0 { next = delta > 0 ? 0 : ids.count - 1 }
         next = max(0, min(ids.count - 1, next))
-        preview(ids[next], proxy: proxy)
+        preview(ids[next], direction: delta)
     }
 
-    private func preview(_ id: UUID, proxy: ScrollViewProxy) {
+    /// Arrow keys already change the preview. This moves the list only when that
+    /// file would leave the window: down keeps it at the bottom edge, up at the top.
+    /// A file already on screen does not move the list.
+    private func preview(_ id: UUID, direction: Int) {
         guard state.selectedFileID != id else { return }
         state.selectForPreview(id)
-        proxy.scrollTo(id, anchor: nil)
+        var request = ScrollRequest()
+        request.token = scrollRequest.token + 1
+        request.direction = direction == 0 ? 1 : direction
+        request.estimate = rowEstimate
+        if let frame = itemFrames[id] {
+            request.hasFrame = true
+            request.frame = frame
+        }
+        scrollRequest = request
+    }
+
+    private func pinListToTop() {
+        var request = scrollRequest
+        request.token += 1
+        request.pinToTop = true
+        scrollRequest = request
+    }
+
+    private var rowEstimate: CGFloat {
+        if state.resultLayout != .list {
+            return state.resultLayout.tile + 28
+        }
+        let heights = itemFrames.values.map(\.height).filter { $0 > 12 }
+        if let height = heights.max() { return height + 8 }
+        return 48
     }
 
     private func tileBands() -> [[UUID]] {
@@ -249,11 +279,14 @@ struct FileListView: View {
 struct FileRow: View {
     @EnvironmentObject private var state: AppState
     let display: ListDisplayRecord
+    @State private var hovering = false
 
     var body: some View {
+        let checked = state.checkedIDs.contains(display.id)
+        let current = state.selectedFileID == display.id
         HStack(spacing: 8) {
             Toggle("", isOn: Binding(
-                get: { state.checkedIDs.contains(display.id) },
+                get: { checked },
                 set: { on in
                     if on { state.checkedIDs.insert(display.id) } else { state.checkedIDs.remove(display.id) }
                     state.selectForPreview(display.id)
@@ -274,20 +307,20 @@ struct FileRow: View {
                         HStack(spacing: 6) {
                             if display.isBest {
                                 Text("BEST")
-                                    .font(.system(size: 9, weight: .bold))
+                                    .font(.system(size: 9, weight: .bold, design: .rounded))
                                     .padding(.horizontal, 5)
                                     .padding(.vertical, 1)
-                                    .background(Capsule().fill(Theme.bestGold.opacity(0.2)))
+                                    .background(Capsule().fill(Theme.bestGold.opacity(0.22)))
                                     .foregroundColor(Theme.bestGold)
                             }
                             Text(display.name)
-                                .font(.system(size: 12.5, weight: display.isBest ? .semibold : .regular))
+                                .font(.system(size: 12.5, weight: display.isBest ? .semibold : .regular, design: .rounded))
                                 .foregroundColor(Theme.text)
                                 .lineLimit(1)
                         }
                         Text("\(display.path)  ·  \(ByteFormat.string(display.size))  ·  \(DateFormat.string(display.modified))")
-                            .font(.system(size: 10))
-                            .foregroundColor(.secondary)
+                            .font(.system(size: 10, design: .rounded))
+                            .foregroundColor(Theme.textDim)
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
@@ -300,6 +333,11 @@ struct FileRow: View {
         .padding(.leading, display.indented ? 22 : 0)
         .padding(.vertical, 2)
         .contentShape(Rectangle())
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(hovering && !current && !checked ? Color.white.opacity(0.05) : Color.clear)
+        )
+        .onHover { hovering = $0 }
     }
 }
 
@@ -366,8 +404,11 @@ struct FileTile: View {
     let display: ListDisplayRecord
     let side: CGFloat
     let isBest: Bool
+    @State private var hovering = false
 
     var body: some View {
+        let checked = state.checkedIDs.contains(display.id)
+        let current = state.selectedFileID == display.id
         VStack(alignment: .leading, spacing: 6) {
             ZStack(alignment: .topTrailing) {
                 TileThumb(path: display.path)
@@ -375,7 +416,7 @@ struct FileTile: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 if isBest {
                     Text("BEST")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
                         .padding(.horizontal, 5)
                         .padding(.vertical, 2)
                         .background(Capsule().fill(Theme.bestGold))
@@ -384,25 +425,27 @@ struct FileTile: View {
                 }
             }
             Text(display.name)
-                .font(.system(size: 11, weight: isBest ? .semibold : .regular))
+                .font(.system(size: 11, weight: isBest ? .semibold : .regular, design: .rounded))
                 .foregroundColor(Theme.text)
                 .lineLimit(2)
             Text(ByteFormat.string(display.size))
-                .font(.system(size: 10))
-                .foregroundColor(.secondary)
+                .font(.system(size: 10, design: .rounded))
+                .foregroundColor(Theme.textDim)
                 .lineLimit(1)
         }
         .padding(8)
         .frame(width: side, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(state.checkedIDs.contains(display.id) || state.selectedFileID == display.id ? Theme.selection : Theme.raised)
+                .fill(current || checked ? Theme.selection : (hovering ? Theme.raised2 : Theme.raised))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(state.selectedFileID == display.id ? Theme.matteBlue : (state.checkedIDs.contains(display.id) ? Theme.matteBlue.opacity(0.7) : Color.white.opacity(0.06)), lineWidth: state.selectedFileID == display.id || state.checkedIDs.contains(display.id) ? 2 : 1)
+                .stroke(current ? Theme.matteBlue : (checked ? Theme.matteBlue.opacity(0.7) : Color.white.opacity(hovering ? 0.16 : 0.06)), lineWidth: current || checked ? 2 : 1)
         )
+        .shadow(color: current ? Theme.matteBlue.opacity(0.35) : Color.black.opacity(0.18), radius: current ? 10 : 4, y: 2)
         .contentShape(Rectangle())
+        .onHover { hovering = $0 }
         .onTapGesture { state.handlePointerSelection(display.id) }
         .overlay(alignment: .topLeading) {
             Toggle("", isOn: Binding(
@@ -520,6 +563,94 @@ final class ThumbCache {
         generator.maximumSize = CGSize(width: maxPixel, height: maxPixel)
         let time = CMTime(seconds: 0.4, preferredTimescale: 600)
         return try? generator.copyCGImage(at: time, actualTime: nil)
+    }
+}
+
+private struct ScrollRequest: Equatable {
+    var token = 0
+    var pinToTop = false
+    var hasFrame = false
+    var frame = CGRect.zero
+    var direction = 1
+    var estimate: CGFloat = 48
+}
+
+/// Scrolls the real AppKit list. SwiftUI's scrollTo is ignored when it is called
+/// from the arrow-key monitor, which left the highlight moving and the list stuck.
+private struct ScrollDriver: NSViewRepresentable {
+    var request: ScrollRequest
+
+    func makeNSView(context: Context) -> ScrollDriverView {
+        let view = ScrollDriverView()
+        view.request = request
+        return view
+    }
+
+    func updateNSView(_ view: ScrollDriverView, context: Context) {
+        let changed = view.request.token != request.token
+        view.request = request
+        if changed { view.reveal() }
+    }
+}
+
+private final class ScrollDriverView: NSView {
+    var request = ScrollRequest()
+    override var isFlipped: Bool { true }
+
+    func reveal() {
+        let request = self.request
+        DispatchQueue.main.async { [weak self] in
+            self?.revealNow(request)
+        }
+    }
+
+    private func revealNow(_ request: ScrollRequest) {
+        guard let scroll = enclosingScrollView else { return }
+        if request.pinToTop {
+            let clip = scroll.contentView
+            let y: CGFloat
+            if clip.isFlipped {
+                y = 0
+            } else {
+                let docH = scroll.documentView?.frame.height ?? 0
+                y = max(0, docH - clip.bounds.height)
+            }
+            clip.scroll(to: NSPoint(x: 0, y: y))
+            scroll.reflectScrolledClipView(clip)
+            return
+        }
+        if request.hasFrame, let doc = scroll.documentView,
+           request.frame.height > 8, request.frame.height < 800 {
+            let origin = convert(CGPoint.zero, to: doc)
+            let rect = NSRect(
+                x: origin.x + request.frame.minX,
+                y: origin.y + request.frame.minY,
+                width: max(1, request.frame.width),
+                height: max(1, request.frame.height)
+            )
+            let clip = scroll.contentView
+            let before = clip.bounds.origin
+            doc.scrollToVisible(rect)
+            let moved = abs(clip.bounds.origin.x - before.x) > 0.5 || abs(clip.bounds.origin.y - before.y) > 0.5
+            let visible = clip.bounds.insetBy(dx: -4, dy: -4)
+            if !moved && !visible.intersects(rect) {
+                nudge(request, in: scroll)
+            }
+            return
+        }
+        nudge(request, in: scroll)
+    }
+
+    private func nudge(_ request: ScrollRequest, in scroll: NSScrollView) {
+        let clip = scroll.contentView
+        var origin = clip.bounds.origin
+        let delta = request.estimate * CGFloat(request.direction == 0 ? 1 : request.direction)
+        origin.y += clip.isFlipped ? delta : -delta
+        let docH = scroll.documentView?.frame.height ?? clip.bounds.height
+        let limit = max(0, docH - clip.bounds.height)
+        origin.y = min(max(0, origin.y), limit)
+        clip.scroll(to: origin)
+        scroll.reflectScrolledClipView(clip)
     }
 }
 
