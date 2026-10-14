@@ -150,7 +150,7 @@ final class ScanEngine: @unchecked Sendable {
     /// Closes the UI's connection before the live database file is replaced.
     /// Replacing Results.sqlite while that connection is still open makes the
     /// finished scan look empty.
-    private func finalize(liveStore: ResultStore, files: [UUID: FileRecord], groups: [UUID: DuplicateGroup], prepare: () -> Void) throws -> URL {
+    private func finalize(liveStore: ResultStore, files: [UUID: FileRecord], groups: [UUID: DuplicateGroup], prepare: @escaping () -> Void) throws -> URL {
         let gate = DispatchSemaphore(value: 0)
         DispatchQueue.main.async {
             prepare()
