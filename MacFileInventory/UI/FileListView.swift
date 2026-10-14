@@ -9,14 +9,18 @@ struct FileListView: View {
     @EnvironmentObject private var state: AppState
     @State private var itemFrames: [UUID: CGRect] = [:]
     @State private var viewport: CGSize = CGSize(width: 640, height: 480)
+    @State private var lastNavStamp: TimeInterval = 0
+    @State private var lastNavKey: String = ""
 
     var body: some View {
         let rows = state.displayedRows()
         ScrollViewReader { proxy in
             ZStack(alignment: .topLeading) {
                 ArrowKeyHost(
-                    onUp: { move(-1, proxy: proxy) },
-                    onDown: { move(1, proxy: proxy) }
+                    onUp: { move(dx: 0, dy: -1, proxy: proxy) },
+                    onDown: { move(dx: 0, dy: 1, proxy: proxy) },
+                    onLeft: { move(dx: -1, dy: 0, proxy: proxy) },
+                    onRight: { move(dx: 1, dy: 0, proxy: proxy) }
                 )
                 .frame(width: 1, height: 1)
                 ScrollView {
@@ -69,7 +73,13 @@ struct FileListView: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: viewport.height, alignment: .topLeading)
                     .coordinateSpace(name: "atlasList")
-                    .onPreferenceChange(ItemFrameKey.self) { itemFrames = $0 }
+                    .onPreferenceChange(ItemFrameKey.self) { frames in
+                        let changed = frames.count != itemFrames.count || frames.contains { id, frame in
+                            guard let old = itemFrames[id] else { return true }
+                            return abs(old.minX - frame.minX) > 1 || abs(old.minY - frame.minY) > 1
+                        }
+                        if changed { itemFrames = frames }
+                    }
                 }
                 .background(Theme.inkSoft)
                 .background(
@@ -82,8 +92,10 @@ struct FileListView: View {
             }
             .onMoveCommand { direction in
                 switch direction {
-                case .up: move(-1, proxy: proxy)
-                case .down: move(1, proxy: proxy)
+                case .up: move(dx: 0, dy: -1, proxy: proxy)
+                case .down: move(dx: 0, dy: 1, proxy: proxy)
+                case .left: move(dx: -1, dy: 0, proxy: proxy)
+                case .right: move(dx: 1, dy: 0, proxy: proxy)
                 default: break
                 }
             }
@@ -122,16 +134,99 @@ struct FileListView: View {
         }
     }
 
-    private func move(_ delta: Int, proxy: ScrollViewProxy) {
-        let ids = state.displayedRows().compactMap(\.fileID)
-        guard !ids.isEmpty else { return }
+    private func move(dx: Int, dy: Int, proxy: ScrollViewProxy) {
+        let key = "\(dx),\(dy)"
+        let now = ProcessInfo.processInfo.systemUptime
+        if key == lastNavKey && now - lastNavStamp < 0.02 { return }
+        lastNavStamp = now
+        lastNavKey = key
+        let bands = tileBands()
+        let flat = bands.flatMap { $0 }
+        guard !flat.isEmpty else { return }
+        if state.resultLayout == .list || (dx == 0 && dy == 0) {
+            let step = dy != 0 ? dy : dx
+            stepLinear(step, ids: flat, proxy: proxy)
+            return
+        }
+        let cols = tileColumns()
+        guard let current = state.selectedFileID, let place = locate(current, in: bands) else {
+            preview(flat[0], proxy: proxy)
+            return
+        }
+        let band = bands[place.band]
+        let col = place.index % cols
+        let row = place.index / cols
+        if dx != 0 {
+            let nextCol = col + dx
+            let sameRow = row * cols + nextCol
+            if nextCol >= 0 && nextCol < cols && sameRow < band.count {
+                preview(band[sameRow], proxy: proxy)
+                return
+            }
+            if dx > 0, place.band + 1 < bands.count {
+                preview(bands[place.band + 1][0], proxy: proxy)
+            } else if dx < 0, place.band > 0 {
+                preview(bands[place.band - 1].last!, proxy: proxy)
+            }
+            return
+        }
+        let nextRow = row + dy
+        let rowsInBand = max(1, (band.count + cols - 1) / cols)
+        if nextRow >= 0 && nextRow < rowsInBand && nextRow * cols < band.count {
+            preview(band[min(nextRow * cols + col, band.count - 1)], proxy: proxy)
+            return
+        }
+        if dy > 0, place.band + 1 < bands.count {
+            let next = bands[place.band + 1]
+            preview(next[min(col, next.count - 1)], proxy: proxy)
+        } else if dy < 0, place.band > 0 {
+            let prev = bands[place.band - 1]
+            let prevRows = max(1, (prev.count + cols - 1) / cols)
+            let idx = min((prevRows - 1) * cols + col, prev.count - 1)
+            preview(prev[max(0, idx)], proxy: proxy)
+        }
+    }
+
+    private func stepLinear(_ delta: Int, ids: [UUID], proxy: ScrollViewProxy) {
         let current = state.selectedFileID.flatMap { ids.firstIndex(of: $0) } ?? -1
         var next = current + delta
         if current < 0 { next = delta > 0 ? 0 : ids.count - 1 }
         next = max(0, min(ids.count - 1, next))
-        let id = ids[next]
+        preview(ids[next], proxy: proxy)
+    }
+
+    private func preview(_ id: UUID, proxy: ScrollViewProxy) {
+        guard state.selectedFileID != id else { return }
         state.selectForPreview(id)
-        DispatchQueue.main.async { proxy.scrollTo(id, anchor: nil) }
+        proxy.scrollTo(id, anchor: nil)
+    }
+
+    private func tileBands() -> [[UUID]] {
+        var bands: [[UUID]] = []
+        var current: [UUID] = []
+        for row in state.displayedRows() {
+            if case .separator = row {
+                if !current.isEmpty { bands.append(current); current = [] }
+            } else if let id = row.fileID {
+                current.append(id)
+            }
+        }
+        if !current.isEmpty { bands.append(current) }
+        return bands
+    }
+
+    private func tileColumns() -> Int {
+        let side = state.resultLayout.tile
+        guard side > 0 else { return 1 }
+        let width = max(side, viewport.width - 20)
+        return max(1, Int(floor((width + 10) / (side + 10))))
+    }
+
+    private func locate(_ id: UUID, in bands: [[UUID]]) -> (band: Int, index: Int)? {
+        for (band, files) in bands.enumerated() {
+            if let index = files.firstIndex(of: id) { return (band, index) }
+        }
+        return nil
     }
 
     @ViewBuilder
@@ -553,9 +648,11 @@ private final class DragCatcherView: NSView {
 struct ArrowKeyHost: NSViewRepresentable {
     var onUp: () -> Void
     var onDown: () -> Void
+    var onLeft: () -> Void
+    var onRight: () -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onUp: onUp, onDown: onDown)
+        Coordinator(onUp: onUp, onDown: onDown, onLeft: onLeft, onRight: onRight)
     }
 
     func makeNSView(context: Context) -> NSView {
@@ -570,6 +667,8 @@ struct ArrowKeyHost: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {
         context.coordinator.onUp = onUp
         context.coordinator.onDown = onDown
+        context.coordinator.onLeft = onLeft
+        context.coordinator.onRight = onRight
         if let view = nsView as? KeyView {
             view.coordinator = context.coordinator
         }
@@ -578,9 +677,27 @@ struct ArrowKeyHost: NSViewRepresentable {
     final class Coordinator {
         var onUp: () -> Void
         var onDown: () -> Void
-        init(onUp: @escaping () -> Void, onDown: @escaping () -> Void) {
+        var onLeft: () -> Void
+        var onRight: () -> Void
+        private var lastKey: (code: UInt16, at: TimeInterval)?
+        init(onUp: @escaping () -> Void, onDown: @escaping () -> Void, onLeft: @escaping () -> Void, onRight: @escaping () -> Void) {
             self.onUp = onUp
             self.onDown = onDown
+            self.onLeft = onLeft
+            self.onRight = onRight
+        }
+
+        func handle(keyCode: UInt16) -> Bool {
+            let now = ProcessInfo.processInfo.systemUptime
+            if let lastKey, lastKey.code == keyCode, now - lastKey.at < 0.03 { return true }
+            lastKey = (keyCode, now)
+            switch keyCode {
+            case 126: onUp(); return true
+            case 125: onDown(); return true
+            case 123: onLeft(); return true
+            case 124: onRight(); return true
+            default: return false
+            }
         }
     }
 
@@ -595,12 +712,9 @@ struct ArrowKeyHost: NSViewRepresentable {
                     guard let self else { return event }
                     if self.isEditingText { return event }
                     switch event.keyCode {
-                    case 126:
-                        self.coordinator?.onUp()
-                        return nil
-                    case 125:
-                        self.coordinator?.onDown()
-                        return nil
+                    case 126, 125, 123, 124:
+                        if self.coordinator?.handle(keyCode: event.keyCode) == true { return nil }
+                        return event
                     default:
                         return event
                     }
@@ -619,11 +733,8 @@ struct ArrowKeyHost: NSViewRepresentable {
             return responder is NSTextView || responder is NSTextField || responder is NSText
         }
         override func keyDown(with event: NSEvent) {
-            switch event.keyCode {
-            case 126: coordinator?.onUp()
-            case 125: coordinator?.onDown()
-            default: super.keyDown(with: event)
-            }
+            if coordinator?.handle(keyCode: event.keyCode) == true { return }
+            super.keyDown(with: event)
         }
     }
 }

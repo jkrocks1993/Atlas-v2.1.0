@@ -72,6 +72,10 @@ final class ResultStore: @unchecked Sendable {
             throw StoreError.sql("Result database integrity check failed.")
         }
         store.close()
+        let wal = URL(fileURLWithPath: destination.path + "-wal")
+        let shm = URL(fileURLWithPath: destination.path + "-shm")
+        try? fm.removeItem(at: wal)
+        try? fm.removeItem(at: shm)
         if fm.fileExists(atPath: destination.path) {
             _ = try fm.replaceItemAt(destination, withItemAt: temp)
         } else {

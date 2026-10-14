@@ -187,7 +187,6 @@ final class AppState: ObservableObject {
                 DispatchQueue.main.async {
                     guard let self, self.scanGeneration == generation else { return }
                     self.currentPath = path
-                    self.updateWalkProgress()
                 }
             },
             onFile: { [weak self] record in
@@ -205,7 +204,6 @@ final class AppState: ObservableObject {
                     self.statistics.add(record.category)
                     self.receivedCount += 1
                     self.estimatedTotal = max(self.estimatedTotal, Double(self.receivedCount) * 1.2)
-                    self.updateWalkProgress()
                 }
             },
             onClassifying: { [weak self] text in
@@ -218,10 +216,17 @@ final class AppState: ObservableObject {
             onTick: { [weak self] fraction, eta, detail in
                 DispatchQueue.main.async {
                     guard let self, self.scanGeneration == generation else { return }
-                    self.progress = fraction
+                    self.progress = max(self.progress, fraction)
                     self.currentPath = detail
-                    if let eta, eta.isFinite, eta > 1 { self.etaLabel = Self.formatETA(eta) }
-                    else if fraction >= 1 { self.etaLabel = "" }
+                    if fraction >= 1 {
+                        self.etaLabel = ""
+                    } else if let eta, eta.isFinite, eta > 1, self.isClassifying {
+                        self.etaLabel = "Comparing · \(Self.formatETA(eta))"
+                    } else if self.isClassifying {
+                        self.etaLabel = "Comparing — measuring time"
+                    } else {
+                        self.etaLabel = "Surveying — comparison time starts after this"
+                    }
                 }
             },
             onCategoryProgress: { [weak self] category, fraction in
@@ -244,6 +249,9 @@ final class AppState: ObservableObject {
                     if self.activeCategory == category { self.reloadRows() }
                     self.statusMessage = "Ready: \(category.displayName)"
                 }
+            },
+            onPrepareFinalize: { [weak self] in
+                self?.prepareForFinalStore()
             },
             onFinished: { [weak self] result in
                 DispatchQueue.main.async {
@@ -286,6 +294,17 @@ final class AppState: ObservableObject {
                 }
             }
         )
+    }
+
+    /// Drops the open results connection before the engine replaces the database file.
+    /// Visible rows stay on screen until the new file is opened.
+    func prepareForFinalStore() {
+        pendingRowWork?.cancel()
+        rowGeneration += 1
+        resultStore?.close()
+        resultStore = nil
+        isLoadingRows = true
+        statusMessage = "Finalizing results…"
     }
 
     func pauseScan() { guard phase == .scanning else { return }; engine?.pause(); phase = .paused; statusMessage = "Paused" }
@@ -404,14 +423,17 @@ final class AppState: ObservableObject {
                 rows[start..<min(start + chunkSize, rows.count)]
             }
             if chunks.isEmpty {
+                let expected = store.count(category: category, status: subtab.status)
                 DispatchQueue.main.async {
                     guard let self, self.rowGeneration == generation else { return }
-                    self.visibleRows = []
-                    self.displayRecords = [:]
-                    self.loadedFileRowCount = 0
+                    if expected == 0 {
+                        self.visibleRows = []
+                        self.displayRecords = [:]
+                        self.loadedFileRowCount = 0
+                    }
                     self.rowHasMore = false
                     self.isLoadingRows = false
-                    self.statusMessage = "Loaded 0 results"
+                    if expected == 0 { self.statusMessage = "Loaded 0 results" }
                 }
                 return
             }
@@ -507,13 +529,23 @@ final class AppState: ObservableObject {
 
     func selectForPreview(_ id: UUID?) {
         guard let id else { selectedFileID = nil; return }
-        _ = record(for: id)
-        selectedFileID = id
+        if selectedFileID != id { selectedFileID = id }
+        guard files[id] == nil, let display = displayRecords[id] else { return }
+        cacheRecord(FileRecord(
+            id: id,
+            url: URL(fileURLWithPath: display.path),
+            category: activeCategory,
+            size: display.size,
+            modified: display.modified,
+            comparisonStatus: activeSubtab.status,
+            isBest: display.isBest,
+            contentKind: activeKind ?? .other
+        ))
     }
 
-    /// Finder-style pointer selection. A plain click replaces the selection.
-    /// Command-click toggles one file. Shift-click selects the inclusive range
-    /// from the anchor. Trackpad clicks are the same events as a mouse click.
+    /// A plain click or arrow-key move only changes the preview.
+    /// Checks stay as they are, including after Select Duplicates.
+    /// Command-click toggles one check. Shift-click selects a range.
     func handlePointerSelection(_ id: UUID) {
         if suppressNextPointerSelection {
             suppressNextPointerSelection = false
@@ -526,6 +558,7 @@ final class AppState: ObservableObject {
         if shift, let anchor = selectionAnchorID ?? selectedFileID, let start = ids.firstIndex(of: anchor), let end = ids.firstIndex(of: id) {
             let range = Set(ids[min(start, end)...max(start, end)])
             if command { checkedIDs.formUnion(range) } else { checkedIDs = range }
+            selectionAnchorID = id
             selectForPreview(id)
             return
         }
@@ -535,7 +568,6 @@ final class AppState: ObservableObject {
             selectForPreview(id)
             return
         }
-        checkedIDs = [id]
         selectionAnchorID = id
         selectForPreview(id)
     }
@@ -616,13 +648,38 @@ final class AppState: ObservableObject {
         }
     }
 
+    var canTrashSelection: Bool {
+        guard !checkedIDs.isEmpty else { return false }
+        switch phase {
+        case .completed, .stopped, .idle:
+            return true
+        case .scanning, .paused:
+            guard categoryCompleted.contains(activeCategory), activeSubtab == .duplicates else { return false }
+            return checkedIDs.contains { displayRecords[$0]?.isBest != true }
+        }
+    }
+
     func deleteChecked() {
-        let ids = checkedIDs
+        var ids = checkedIDs
+        let duringScan = phase == .scanning || phase == .paused
+        if duringScan {
+            guard categoryCompleted.contains(activeCategory), activeSubtab == .duplicates else { return }
+            let keptBest = ids.filter { displayRecords[$0]?.isBest == true }
+            ids.subtract(keptBest)
+            guard !ids.isEmpty else {
+                statusMessage = "BEST copies stay until the scan finishes"
+                return
+            }
+        }
         guard !ids.isEmpty else { return }
         guard let store = resultStore else {
             let targets = ids.compactMap { files[$0] }
-            do { try FileOperations.trash(urls: targets.map(\.url)); checkedIDs.subtract(ids); statusMessage = "Moved \(targets.count) item(s) to Trash" }
-            catch { presentAlert("Delete failed", error.localizedDescription) }
+            do {
+                try FileOperations.trash(urls: targets.map(\.url))
+                checkedIDs.subtract(ids)
+                engine?.tombstone(ids)
+                statusMessage = "Moved \(targets.count) item(s) to Trash"
+            } catch { presentAlert("Delete failed", error.localizedDescription) }
             return
         }
         let targets = store.selectedRecords(ids: ids)
@@ -630,6 +687,7 @@ final class AppState: ObservableObject {
         do {
             try FileOperations.trash(urls: targets.map(\.url))
             checkedIDs.subtract(ids)
+            if duringScan { engine?.tombstone(ids) }
             for id in ids { files.removeValue(forKey: id) }
             if let selectedFileID, ids.contains(selectedFileID) { self.selectedFileID = nil }
             statusMessage = "Moved \(targets.count) item(s) to Trash"

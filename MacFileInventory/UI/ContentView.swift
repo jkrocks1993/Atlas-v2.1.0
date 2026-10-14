@@ -110,8 +110,11 @@ struct ContentView: View {
     private var footer: some View {
         HStack(spacing: 10) {
             Button("Delete → Trash") { state.deleteChecked() }
-                .buttonStyle(MatteButtonStyle(kind: .destructive, enabled: !state.checkedIDs.isEmpty && state.phase != .scanning && state.phase != .paused))
-                .disabled(state.checkedIDs.isEmpty || state.phase == .scanning || state.phase == .paused)
+                .buttonStyle(MatteButtonStyle(kind: .destructive, enabled: state.canTrashSelection))
+                .disabled(!state.canTrashSelection)
+                .help(state.phase == .scanning || state.phase == .paused
+                      ? "While a scan is running, only inferior duplicates of a finished tab can be deleted. BEST stays so later tabs can still match it."
+                      : "Move the checked files to Trash.")
             Button("Move…") { state.requestMove() }
                 .buttonStyle(MatteButtonStyle(kind: .normal, enabled: !state.checkedIDs.isEmpty && state.phase != .scanning && state.phase != .paused))
                 .disabled(state.checkedIDs.isEmpty || state.phase == .scanning || state.phase == .paused)
@@ -128,7 +131,7 @@ struct ContentView: View {
             Text("\(state.checkedIDs.count) selected")
                 .font(.system(size: 11, weight: .medium, design: .rounded))
                 .foregroundColor(Theme.text)
-                .help("Click selects one file. Drag across files to select several. Command-click or Command-drag adds. Shift-click selects a range. Two-finger scroll still scrolls.")
+                .help("Click a file to preview it without changing the checks. Use the checkbox, Select Duplicates, Command-click, Shift-click, or a drag to change the selection.")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -137,8 +140,8 @@ struct ContentView: View {
 }
 
 enum ReleaseNotes {
-    static let currentVersion = "2.1.4"
-    static let currentBuild = "18"
+    static let currentVersion = "2.1.5"
+    static let currentBuild = "19"
 
     struct Entry: Identifiable {
         let id: String
@@ -148,6 +151,13 @@ enum ReleaseNotes {
     }
 
     static let history: [Entry] = [
+        Entry(id: "2.1.5", version: "2.1.5", build: "19", lines: [
+            "Arrow keys move one tile at a time, including left and right. Preview no longer clears a selection.",
+            "Select Duplicates stays checked while you preview other files.",
+            "The time estimate now follows comparison, not the fast survey.",
+            "Finished scans keep the result list on screen.",
+            "While a scan is still running, Delete works on inferior duplicates of a finished tab. BEST stays until the scan ends. After completion, every checked file can be deleted."
+        ]),
         Entry(id: "2.1.4", version: "2.1.4", build: "18", lines: [
             "Drag selection now starts in the empty space under and beside the tiles, not only on a tile.",
             "The selection rectangle stays smooth. The list updates only when the set of selected files changes."

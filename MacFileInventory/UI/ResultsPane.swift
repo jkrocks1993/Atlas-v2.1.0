@@ -42,7 +42,7 @@ struct ResultsPane: View {
                 .buttonStyle(MatteButtonStyle(kind: .quiet))
             Button("Select Duplicates") { state.selectInferiorDuplicates() }
                 .buttonStyle(MatteButtonStyle(kind: .quiet))
-                .help("Checks inferior copies only. BEST stays unmarked.")
+                .help("Checks inferior copies only. BEST stays unmarked. Previewing a file does not clear these checks.")
             if state.activeSubtab == .duplicates {
                 Button("NOT DUPLICATE") { state.markSelectedAsNotDuplicate() }
                     .buttonStyle(MatteButtonStyle(kind: .normal, enabled: !state.checkedIDs.isEmpty))
